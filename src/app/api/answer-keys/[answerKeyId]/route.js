@@ -6,14 +6,14 @@ import { getMilvusClient } from '@/lib/milvus';
 // ดึงข้อมูลไฟล์เฉลยเฉพาะ
 export async function GET(request, { params }) {
   try {
-    const { id } = params;
+    const { answerKeyId } = params;
     
     const supabase = await createServerClient();
     
     const { data, error } = await supabase
       .from('answer_keys')
       .select('*, subjects(subject_name), terms(term_name)')
-      .eq('answer_key_id', id)
+      .eq('answer_key_id', answerKeyId)
       .single();
     
     if (error) {
@@ -29,7 +29,7 @@ export async function GET(request, { params }) {
 // อัพเดทข้อมูลไฟล์เฉลย
 export async function PUT(request, { params }) {
   try {
-    const { id } = params;
+    const { answerKeyId } = params;
     const formData = await request.formData();
     const file = formData.get('file');
     const subjectId = formData.get('subjectId');
@@ -63,7 +63,7 @@ export async function PUT(request, { params }) {
       const { data, error } = await supabase
         .from('answer_keys')
         .update(updateData)
-        .eq('answer_key_id', id)
+        .eq('answer_key_id', answerKeyId)
         .select();
       
       if (error) {
@@ -93,7 +93,7 @@ export async function PUT(request, { params }) {
       const { data, error } = await supabase
         .from('answer_keys')
         .update(updateData)
-        .eq('answer_key_id', id)
+        .eq('answer_key_id', answerKeyId)
         .select();
       
       if (error) {
@@ -119,7 +119,7 @@ export async function PUT(request, { params }) {
 // ลบไฟล์เฉลย
 export async function DELETE(request, { params }) {
   try {
-    const { id } = params;
+    const { answerKeyId } = params;
     
     const supabase = await createServerClient();
     const milvusClient = await getMilvusClient();
@@ -127,14 +127,14 @@ export async function DELETE(request, { params }) {
     // ลบ embeddings จาก Milvus ก่อน
     await milvusClient.delete({
       collection_name: 'answer_key_embeddings',
-      filter: `answer_key_id == ${id}`
+      filter: `answer_key_id == ${answerKeyId}`
     });
     
     // ลบข้อมูลจาก Supabase
     const { error } = await supabase
       .from('answer_keys')
       .delete()
-      .eq('answer_key_id', id);
+      .eq('answer_key_id', answerKeyId);
     
     if (error) {
       return NextResponse.json(

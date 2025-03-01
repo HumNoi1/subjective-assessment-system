@@ -7,14 +7,14 @@ import { createEmbeddings } from '@/lib/llm';
 // ดึงข้อมูลคำตอบของนักเรียนเฉพาะ
 export async function GET(request, { params }) {
   try {
-    const { id } = params;
+    const { studentAnswerId } = params;
     
     const supabase = await createServerClient();
     
     const { data, error } = await supabase
       .from('student_answers')
       .select('*, students(name), answer_keys(file_name), folders(folder_name)')
-      .eq('student_answer_id', id)
+      .eq('student_answer_id', studentAnswerId)
       .single();
     
     if (error) {
@@ -30,7 +30,7 @@ export async function GET(request, { params }) {
 // อัพเดทข้อมูลคำตอบของนักเรียน
 export async function PUT(request, { params }) {
   try {
-    const { id } = params;
+    const { studentAnswerId } = params;
     const formData = await request.formData();
     const file = formData.get('file');
     const studentId = formData.get('studentId');
@@ -66,7 +66,7 @@ export async function PUT(request, { params }) {
       const { data, error } = await supabase
         .from('student_answers')
         .update(updateData)
-        .eq('student_answer_id', id)
+        .eq('student_answer_id', studentAnswerId)
         .select();
       
       if (error) {
@@ -80,7 +80,7 @@ export async function PUT(request, { params }) {
       const milvusClient = await getMilvusClient();
       await milvusClient.delete({
         collection_name: 'student_answer_embeddings',
-        filter: `student_answer_id == ${id}`
+        filter: `student_answer_id == ${studentAnswerId}`
       });
       
       // สร้าง embeddings ใหม่
@@ -89,7 +89,7 @@ export async function PUT(request, { params }) {
       await milvusClient.insert({
         collection_name: 'student_answer_embeddings',
         fields_data: [{
-          student_answer_id: id,
+          student_answer_id: studentAnswerId,
           content_chunk: fileContent,
           embedding: embedding,
           metadata: JSON.stringify({
@@ -109,7 +109,7 @@ export async function PUT(request, { params }) {
       const { data, error } = await supabase
         .from('student_answers')
         .update(updateData)
-        .eq('student_answer_id', id)
+        .eq('student_answer_id', studentAnswerId)
         .select();
       
       if (error) {
@@ -135,7 +135,7 @@ export async function PUT(request, { params }) {
 // ลบคำตอบของนักเรียน
 export async function DELETE(request, { params }) {
   try {
-    const { id } = params;
+    const { studentAnswerId } = params;
     
     const supabase = await createServerClient();
     const milvusClient = await getMilvusClient();
@@ -143,14 +143,14 @@ export async function DELETE(request, { params }) {
     // ลบ embeddings จาก Milvus ก่อน
     await milvusClient.delete({
       collection_name: 'student_answer_embeddings',
-      filter: `student_answer_id == ${id}`
+      filter: `student_answer_id == ${studentAnswerId}`
     });
     
     // ลบข้อมูลจาก Supabase
     const { error } = await supabase
       .from('student_answers')
       .delete()
-      .eq('student_answer_id', id);
+      .eq('student_answer_id', studentAnswerId);
     
     if (error) {
       return NextResponse.json(
