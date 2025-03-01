@@ -1,7 +1,6 @@
-// src/app/login/page.js
-'use client';
+"use client";
 
-import { useState } from 'react';
+import { use, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
@@ -39,13 +38,26 @@ export default function LoginPage() {
         throw new Error(data.error || 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ');
       }
       
-      router.push('/dashboard');
+      // บันทึกข้อมูลผู้ใช้ลงใน Local Storage
+      localStorage.setItem('session', JSON.stringify(data.session));
+
     } catch (error) {
       setError(error.message);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        router.push('/dashboard');
+      }
+    };
+
+    checkSession();
+  }, [router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 py-12 px-4 sm:px-6 lg:px-8">

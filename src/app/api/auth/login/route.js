@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
+import { useEffect } from 'react';
 
 export async function POST(request) {
   try {
@@ -31,7 +32,7 @@ export async function POST(request) {
     const { data: teacherData, error: teacherError } = await supabase
       .from('teachers')
       .select('*')
-      .eq('user_id', data.user.id)
+      .eq('email', data.user.email)
       .single();
     
     if (teacherError) {
@@ -45,8 +46,7 @@ export async function POST(request) {
       message: 'เข้าสู่ระบบสำเร็จ',
       session: data.session,
       teacher: teacherData
-    });
-    
+    }); 
   } catch (error) {
     return NextResponse.json(
       { error: error.message },
