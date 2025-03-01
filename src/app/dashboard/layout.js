@@ -108,11 +108,11 @@ export default function DashboardLayout({ children }) {
         {/* Header */}
         <header className="bg-white shadow-sm z-10">
           <div className="flex items-center justify-between p-4">
-            <h2 className="text-xl font-semibold">ระบบผู้ช่วยตรวจข้อสอบอัตนัย</h2>
+            <h2 className="text-xl font-semibold text-black">ระบบผู้ช่วยตรวจข้อสอบอัตนัย</h2>
             
             <div className="flex items-center space-x-4">
               <div className="text-right">
-                <p className="text-sm font-medium">{teacher?.name}</p>
+                <p className="text-sm font-medium text-black">{teacher?.name}</p>
                 <p className="text-xs text-gray-500">{teacher?.email}</p>
               </div>
               

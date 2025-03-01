@@ -229,7 +229,7 @@ export default function ClassesPage() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-bold mb-6">จัดการชั้นเรียน</h1>
+      <h1 className="text-2xl font-bold mb-6 text-black">จัดการชั้นเรียน</h1>
       
       {/* แสดงข้อความผิดพลาด */}
       {error && (

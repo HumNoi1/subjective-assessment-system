@@ -154,7 +154,7 @@ export default function Dashboard() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-bold mb-8">ยินดีต้อนรับ, {teacher?.name}</h1>
+      <h1 className="text-2xl font-bold mb-8 text-black ">ยินดีต้อนรับ  {teacher?.name}</h1>
       
       {/* สถิติ */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -349,7 +349,7 @@ function StatCard({ title, value, icon, bgColor, linkUrl }) {
           {icon}
         </div>
         <div>
-          <p className="text-gray-500">{title}</p>
+          <p className="text-black">{title}</p>
           <p className="text-2xl font-bold">{value}</p>
         </div>
       </div>
