@@ -3,13 +3,13 @@ import { createServerClient } from '@/lib/supabase';
 
 export async function GET(request, { params }) {
   try {
-    const { id } = params;
+    const { teacherId } = params;
     const supabase = await createServerClient();
     
     const { data, error } = await supabase
       .from('teachers')
       .select('*')
-      .eq('teacher_id', id)
+      .eq('teacher_id', teacherId)
       .single();
     
     if (error) {
@@ -24,7 +24,7 @@ export async function GET(request, { params }) {
 
 export async function PUT(request, { params }) {
     try {
-      const { id } = params;
+      const { teacherId } = params;
       const { name, email } = await request.json();
       
       const supabase = await createServerClient();
@@ -32,7 +32,7 @@ export async function PUT(request, { params }) {
       const { data, error } = await supabase
         .from('teachers')
         .update({ name, email })
-        .eq('teacher_id', id)
+        .eq('teacher_id', teacherId)
         .select();
       
       if (error) {

@@ -1,45 +1,45 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 
-// ดึงข้อมูลเทอมเรียนเฉพาะ
+// ดึงข้อมูลนักเรียนรายบุคคล
 export async function GET(request, { params }) {
   try {
-    const { id } = params;
+    const { studentId } = params;
     
     const supabase = await createServerClient();
     
     const { data, error } = await supabase
-      .from('terms')
-      .select('*')
-      .eq('term_id', id)
+      .from('students')
+      .select('*, classes(class_name)')
+      .eq('student_id', studentId)
       .single();
     
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
     
-    return NextResponse.json({ term: data });
+    return NextResponse.json({ student: data });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-// อัพเดทข้อมูลเทอมเรียน
+// อัพเดทข้อมูลนักเรียน
 export async function PUT(request, { params }) {
   try {
-    const { id } = params;
-    const { termName, startDate, endDate } = await request.json();
+    const { studentId } = params;
+    const { name, email, classId } = await request.json();
     
     const supabase = await createServerClient();
     
     const { data, error } = await supabase
-      .from('terms')
+      .from('students')
       .update({ 
-        term_name: termName,
-        start_date: startDate,
-        end_date: endDate
+        name, 
+        email, 
+        class_id: classId 
       })
-      .eq('term_id', id)
+      .eq('student_id', studentId)
       .select();
     
     if (error) {
@@ -47,31 +47,31 @@ export async function PUT(request, { params }) {
     }
     
     return NextResponse.json({ 
-      message: 'อัพเดทเทอมเรียนสำเร็จ',
-      term: data[0]
+      message: 'อัพเดทข้อมูลนักเรียนสำเร็จ',
+      student: data[0]
     });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-// ลบเทอมเรียน
+// ลบข้อมูลนักเรียน
 export async function DELETE(request, { params }) {
   try {
-    const { id } = params;
+    const { studentId } = params;
     
     const supabase = await createServerClient();
     
     const { error } = await supabase
-      .from('terms')
+      .from('students')
       .delete()
-      .eq('term_id', id);
+      .eq('student_id', studentId);
     
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
     
-    return NextResponse.json({ message: 'ลบเทอมเรียนสำเร็จ' });
+    return NextResponse.json({ message: 'ลบข้อมูลนักเรียนสำเร็จ' });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

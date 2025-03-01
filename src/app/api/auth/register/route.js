@@ -34,7 +34,7 @@ export async function POST(request) {
         { 
           name, 
           email,
-          user_id: authData.user.id 
+          teacher_id: authData.teacher.id 
         }
       ])
       .select();
