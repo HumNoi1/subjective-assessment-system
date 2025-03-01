@@ -1,6 +1,8 @@
+// src/app/api/assessments/[id]/approve/route.js
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 
+// อนุมัติการประเมิน
 export async function PUT(request, { params }) {
   try {
     const { id } = params;

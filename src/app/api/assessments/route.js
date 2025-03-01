@@ -1,3 +1,4 @@
+// src/app/api/assessments/route.js
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { createEmbeddings, checkAnswer } from '@/lib/llm';
@@ -17,7 +18,7 @@ export async function POST(request) {
     
     const supabase = await createServerClient();
     
-    // ดึงข้อมูลคำตอบนักเรียน
+    // ดึงข้อมูลคำตอบนักเรียนและเฉลย
     const { data: studentAnswerData, error: studentAnswerError } = await supabase
       .from('student_answers')
       .select('*')
@@ -31,7 +32,6 @@ export async function POST(request) {
       );
     }
     
-    // ดึงข้อมูลเฉลย
     const { data: answerKeyData, error: answerKeyError } = await supabase
       .from('answer_keys')
       .select('*')
@@ -66,7 +66,7 @@ export async function POST(request) {
     // ตรวจคำตอบโดย LLM
     const assessmentResult = await checkAnswer(
       studentAnswerData.content,
-      relevantAnswerKey || answerKeyData.content // ใช้เฉลยที่ค้นพบหรือเฉลยทั้งหมด
+      relevantAnswerKey || answerKeyData.content
     );
     
     // แยกคะแนนและข้อเสนอแนะจากผลลัพธ์
@@ -82,7 +82,7 @@ export async function POST(request) {
           answer_key_id: answerKeyId,
           score: score,
           feedback_text: assessmentResult,
-          confidence: 70, // ตั้งค่าเริ่มต้น (อาจปรับตามความเหมาะสม)
+          confidence: 70,
           is_approved: false
         }
       ])
@@ -103,7 +103,7 @@ export async function POST(request) {
           operation_type: 'check_answer',
           input_text: `Student Answer: ${studentAnswerData.content.substring(0, 100)}... Answer Key: ${relevantAnswerKey.substring(0, 100)}...`,
           output_text: assessmentResult.substring(0, 500),
-          processing_time: 5.0, // ตัวอย่าง (ควรวัดเวลาจริงๆ)
+          processing_time: 5.0,
           token_count: assessmentResult.split(' ').length,
           assessment_id: assessmentData[0].assessment_id
         }
@@ -113,6 +113,64 @@ export async function POST(request) {
       message: 'ประเมินคำตอบสำเร็จ',
       assessment: assessmentData[0]
     });
+    
+  } catch (error) {
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+// ดึงรายการการประเมินทั้งหมด
+export async function GET(request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const studentId = searchParams.get('studentId');
+    const studentAnswerId = searchParams.get('studentAnswerId');
+    const isApproved = searchParams.get('isApproved');
+    
+    const supabase = await createServerClient();
+    
+    let query = supabase
+      .from('assessments')
+      .select(`
+        *,
+        student_answers (
+          *,
+          students (
+            student_id,
+            name
+          )
+        ),
+        answer_keys (
+          *,
+          subjects (subject_name)
+        )
+      `);
+    
+    if (studentAnswerId) {
+      query = query.eq('student_answer_id', studentAnswerId);
+    }
+    
+    if (studentId) {
+      query = query.eq('student_answers.student_id', studentId);
+    }
+    
+    if (isApproved !== null) {
+      query = query.eq('is_approved', isApproved === 'true');
+    }
+    
+    const { data, error } = await query;
+    
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 400 }
+      );
+    }
+    
+    return NextResponse.json({ assessments: data });
     
   } catch (error) {
     return NextResponse.json(
