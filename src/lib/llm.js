@@ -1,4 +1,3 @@
-// ใช้ OpenAI API เพื่อเชื่อมต่อกับ LMStudio
 import OpenAI from 'openai';
 
 const openai = new OpenAI({
@@ -9,7 +8,7 @@ const openai = new OpenAI({
 // สร้าง Embeddings
 export async function createEmbeddings(text) {
   const response = await openai.embeddings.create({
-    model: "baii-bge-m3", // เปลี่ยนเป็น model embedding baii-bge-m3
+    model: "text-embedding-bge-m3", // เปลี่ยนเป็น model embedding baii-bge-m3
     input: text,
   });
   
@@ -40,7 +39,7 @@ ${studentAnswer}
 `;
 
   const response = await openai.chat.completions.create({
-    model: "llama3.2-3b", // เปลี่ยนเป็น model llama3.2-3b
+    model: "llama-3.2-3b-instruct", // เปลี่ยนเป็น model llama3.2-3b
     messages: [
       { role: "system", content: "คุณเป็นผู้ช่วยตรวจข้อสอบอัตนัยที่มีความเชี่ยวชาญ มีความเที่ยงตรงและยุติธรรมในการประเมิน" },
       { role: "user", content: prompt }
