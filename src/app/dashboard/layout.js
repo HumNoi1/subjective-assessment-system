@@ -4,7 +4,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
 
 export default function DashboardLayout({ children }) {
@@ -19,30 +18,29 @@ export default function DashboardLayout({ children }) {
         const { data: { session } } = await supabase.auth.getSession();
         
         if (!session) {
-          const savedSession = localStorage.getItem('session');
-          if (savedSession) {
-            const parsedSession = JSON.parse(savedSession);
-            await supabase.auth.setSession(parsedSession);
-          } else {
-            router.push('/login');
-          }
+          router.push('/login');
+          return;
         }
         
-        const { data: teacherData } = await supabase
+        // เปลี่ยนวิธีการดึงข้อมูลอาจารย์
+        const { data: teacherData, error } = await supabase
           .from('teachers')
           .select('*')
-          .eq('user_id', session.user.id)
+          .eq('teacher_id', session.user.id)
           .single();
         
-        if (teacherData) {
-          setTeacher(teacherData);
-        } else {
+        if (error || !teacherData) {
+          console.error("Error fetching teacher data:", error);
           router.push('/login');
+          return;
         }
+        
+        setTeacher(teacherData);
+        setLoading(false);
+        
       } catch (error) {
         console.error('Error checking session:', error);
-      } finally {
-        setLoading(false);
+        router.push('/login');
       }
     };
     

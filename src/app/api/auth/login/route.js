@@ -31,7 +31,7 @@ export async function POST(request) {
     const { data: teacherData, error: teacherError } = await supabase
       .from('teachers')
       .select('*')
-      .eq('email', data.user.email)
+      .eq('teacher_id', data.user.id)
       .single();
     
     if (teacherError) {

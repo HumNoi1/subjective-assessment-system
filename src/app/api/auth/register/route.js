@@ -32,7 +32,8 @@ export async function POST(request) {
       .from('teachers')
       .insert([
         { 
-          name, 
+          teacher_id: authData.user.id,
+          name,
           email
         }
       ])

@@ -23,7 +23,7 @@ export default function Assessments() {
       const { data: teacher } = await supabase
         .from('teachers')
         .select('*')
-        .eq('user_id', session.user.id)
+        .eq('teacher_id', session.user.id)
         .single();
       
       if (teacher) {

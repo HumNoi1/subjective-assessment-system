@@ -20,7 +20,7 @@ export const createServerClient = async () => {
   
   return createClient(supabaseUrl, supabaseServiceKey, {
     auth: {
-      persistSession: true,
+      persistSession: false,
     }
   });
 };
