@@ -19,8 +19,13 @@ export default function DashboardLayout({ children }) {
         const { data: { session } } = await supabase.auth.getSession();
         
         if (!session) {
-          router.push('/login');
-          return;
+          const savedSession = localStorage.getItem('session');
+          if (savedSession) {
+            const parsedSession = JSON.parse(savedSession);
+            await supabase.auth.setSession(parsedSession);
+          } else {
+            router.push('/login');
+          }
         }
         
         const { data: teacherData } = await supabase

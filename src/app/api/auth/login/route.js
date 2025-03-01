@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { useEffect } from 'react';
 
 export async function POST(request) {
   try {

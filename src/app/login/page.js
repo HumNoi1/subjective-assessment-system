@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { use, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
@@ -40,6 +40,11 @@ export default function LoginPage() {
       
       // บันทึกข้อมูลผู้ใช้ลงใน Local Storage
       localStorage.setItem('session', JSON.stringify(data.session));
+      localStorage.setItem('teacher', JSON.stringify(data.teacher));
+
+      await supabase.auth.setSession(data.session);
+
+      router.push('/dashboard');
 
     } catch (error) {
       setError(error.message);
