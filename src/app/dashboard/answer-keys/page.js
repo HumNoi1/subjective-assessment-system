@@ -33,7 +33,7 @@ export default function AnswerKeysPage() {
         const { data: teacherData } = await supabase
           .from('teachers')
           .select('*')
-          .eq('user_id', session.user.id)
+          .eq('teacher_id', session.user.id)
           .single();
         
         if (teacherData) {

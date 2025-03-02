@@ -35,20 +35,26 @@ export default function SubjectsPage() {
         const { data: teacherData } = await supabase
           .from('teachers')
           .select('*')
-          .eq('user_id', session.user.id)
+          .eq('teacher_id', session.user.id)
           .single();
         
         if (teacherData) {
           setTeacherId(teacherData.teacher_id);
           
           // ดึงข้อมูลชั้นเรียน
-          const { data: classesData } = await supabase
+          const { data: classesData, eror: classesError } = await supabase
             .from('classes')
             .select('*')
             .eq('teacher_id', teacherData.teacher_id)
             .order('academic_year', { ascending: false });
           
-          setClasses(classesData || []);
+          console.log("classes data:", classesData, "Error:", classesError);
+
+          if (classesError) {
+            console.error('Error fetching classes:', classesError);
+          } else {
+            setClasses(classesData || []);
+          }
           
           // ดึงข้อมูลวิชา
           const { data: subjectsData, error: subjectsError } = await supabase
@@ -87,6 +93,13 @@ export default function SubjectsPage() {
       setError('กรุณากรอกข้อมูลให้ครบถ้วน');
       return;
     }
+
+    console.log("Creating Subject:", {
+      subjectName,
+      subjectCode,
+      teacherId,
+      classId: selectedClass
+    })
     
     try {
       setCreating(true);
