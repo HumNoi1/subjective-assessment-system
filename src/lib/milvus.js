@@ -15,14 +15,88 @@ export async function getMilvusClient() {
 
 export async function initializeMilvus() {
   try {
+
+    const client = await getMilvusClient();
+
     // สร้าง collection ที่จำเป็น
     await createAnswerKeyCollection
     await createStudentAnswerCollection
+
     console.log('Milvus collections initialized successfully');
     return true;
   } catch (error) {
     console.error('Failed to initialize Milvus collections:', error);
     return false;
+  }
+}
+
+// ทดสอบ Milvus กับข้อความภาษาไทย
+export async function testMilvusWithThaiText() {
+  try {
+    const client = await getMilvusClient();
+    
+    // ทดสอบข้อความภาษาไทย
+    const thaiText = "ทดสอบภาษาไทยในฐานข้อมูล Milvus";
+    
+    // สร้าง collection ทดสอบถ้ายังไม่มี
+    try {
+      await client.createCollection({
+        collection_name: 'thai_test',
+        fields: [
+          {
+            name: 'id',
+            data_type: 5, // DataType.Int64
+            is_primary_key: true,
+            autoID: true,
+          },
+          {
+            name: 'text',
+            data_type: 21, // DataType.VarChar
+            max_length: 65535,
+          }
+        ],
+      });
+      console.log('Created test collection for Thai language');
+    } catch (error) {
+      // Collection อาจมีอยู่แล้ว
+      console.log('Collection may already exist:', error.message);
+    }
+    
+    // ทดสอบการเขียน
+    const insertResult = await client.insert({
+      collection_name: 'thai_test',
+      fields_data: [{
+        text: thaiText
+      }]
+    });
+    
+    console.log('Insert result:', insertResult);
+    
+    // ทดสอบการอ่าน
+    const queryResult = await client.query({
+      collection_name: 'thai_test',
+      output_fields: ['text'],
+      limit: 1
+    });
+    
+    console.log('Query result:', queryResult);
+    
+    return {
+      success: true,
+      message: 'Milvus สามารถจัดการข้อความภาษาไทยได้',
+      results: {
+        insert: insertResult,
+        query: queryResult
+      }
+    };
+    
+  } catch (error) {
+    console.error('Error testing Milvus with Thai text:', error);
+    return {
+      success: false,
+      message: 'เกิดข้อผิดพลาดในการทดสอบ Milvus กับข้อความภาษาไทย',
+      error: error.message
+    };
   }
 }
 

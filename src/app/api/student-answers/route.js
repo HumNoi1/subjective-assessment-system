@@ -21,7 +21,8 @@ export async function POST(request) {
     }
     
     // อ่านเนื้อหาไฟล์
-    const fileContent = await file.text();
+    const fileBuffer = await file.arrayBuffer();
+    const fileContent = new TextDecoder('utf-8').decode(new Uint8Array(fileBuffer));
     
     const supabase = await createServerClient();
     

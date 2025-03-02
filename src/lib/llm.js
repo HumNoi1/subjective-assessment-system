@@ -3,16 +3,28 @@ import OpenAI from 'openai';
 const openai = new OpenAI({
   baseURL: process.env.LMSTUDIO_API_URL || 'http://localhost:1234/v1',
   apiKey: process.env.LMSTUDIO_API_KEY || 'lm-studio', // ค่าเริ่มต้นสำหรับ LMStudio
-});
+  timeout: 60000, // 60 วินาที
+ });
 
 // สร้าง Embeddings
 export async function createEmbeddings(text) {
-  const response = await openai.embeddings.create({
-    model: "text-embedding-bge-m3@q4_k_m", // เปลี่ยนเป็น model embedding baii-bge-m3
-    input: text,
-  });
-  
-  return response.data[0].embedding;
+  try {
+    // ตรวจสอบ text เป็น string
+    if (typeof text !== 'string') {
+      console.warn('Input to createEmbeddings is not a string:', typeof text);
+    }
+
+    const response = await openai.embeddings.create({
+      model: "text-embedding-bge-m3@q4_k_m", // เปลี่ยนเป็น model text-embedding-bge-m3@q4_k_m
+      input: text,
+      encoding_format: "float"
+    });
+
+    return response[0].embedding;
+  } catch (error) {
+    console.error('Error creating embeddings:', error);
+    throw new error('Failed to create embeddings. Please check your LLM service connection.');
+  }
 }
 
 // ตรวจคำตอบโดย LLM
