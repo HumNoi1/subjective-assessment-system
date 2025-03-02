@@ -8,7 +8,7 @@ const openai = new OpenAI({
 // สร้าง Embeddings
 export async function createEmbeddings(text) {
   const response = await openai.embeddings.create({
-    model: "text-embedding-bge-m3", // เปลี่ยนเป็น model embedding baii-bge-m3
+    model: "text-embedding-bge-m3@q4_k_m", // เปลี่ยนเป็น model embedding baii-bge-m3
     input: text,
   });
   
