@@ -9,15 +9,12 @@ export async function POST(request) {
     const { answerKeyId, recreate = false } = await request.json();
     
     if (!answerKeyId) {
-      return NextResponse.json(
-        { error: 'Answer key ID is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Answer key ID is required' }, { status: 400 });
     }
     
     const supabase = await createServerClient();
     
-    // ดึงข้อมูลไฟล์เฉลย
+    // Get answer key data
     const { data: answerKeyData, error: answerKeyError } = await supabase
       .from('answer_keys')
       .select('*')
@@ -25,146 +22,198 @@ export async function POST(request) {
       .single();
     
     if (answerKeyError) {
-      return NextResponse.json(
-        { error: 'Answer key not found' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Answer key not found' }, { status: 400 });
     }
-
+    
+    // Check file type
     const fileExtension = answerKeyData.file_name.split('.').pop().toLowerCase();
     const isPDF = fileExtension === 'pdf';
-
-    let fileContent;
-
+    
     // Get file content
+    let fileContent;
+    
     if (isPDF) {
       // For PDFs, download the file and extract text
       const { data: fileData, error: fileError } = await supabase.storage
         .from('documents')
         .download(answerKeyData.file_path);
-        
+      
       if (fileError) {
-        return NextResponse.json({ error: 'File download failed' }, { status: 400 });
+        return NextResponse.json({ error: 'File download failed', details: fileError }, { status: 400 });
       }
-
+      
       // Convert the downloaded file to ArrayBuffer
       const fileBuffer = await fileData.arrayBuffer();
-
+      
       // Extract text from PDF
       fileContent = await extractTextFromPDF(fileBuffer);
+      
+      // Update the content in database with extracted text
+      const { error: updateError } = await supabase
+        .from('answer_keys')
+        .update({ content: fileContent })
+        .eq('answer_key_id', answerKeyId);
+      
+      if (updateError) {
+        console.warn('Could not update content with extracted text:', updateError);
+      }
     } else {
-      // FOr non-PDF files, the content is already in the database
+      // For non-PDF files, the content is already in the database
       fileContent = answerKeyData.content;
-
+      
       // If content is a placeholder, download and read the file
-      if (fileContent.startWith('[Binary file stored at]')) {
-        const ( data: fileData, error: fileError } = await supabase.storage
+      if (fileContent.startsWith('[Binary file stored at')) {
+        const { data: fileData, error: fileError } = await supabase.storage
           .from('documents')
           .download(answerKeyData.file_path);
         
         if (fileError) {
-          return NextResponse.json({ error: 'File download failed' }, { status: 400 });
+          return NextResponse.json({ error: 'File download failed', details: fileError }, { status: 400 });
         }
-
-        fileContent = await fileData.text();
+        
+        fileContent = new TextDecoder('utf-8').decode(await fileData.arrayBuffer());
+        
+        // Update the content in database with actual text
+        const { error: updateError } = await supabase
+          .from('answer_keys')
+          .update({ content: fileContent })
+          .eq('answer_key_id', answerKeyId);
+        
+        if (updateError) {
+          console.warn('Could not update content with file text:', updateError);
+        }
       }
     }
     
-    // 1. ดาวน์โหลดไฟล์จาก Supabase Storage
-    const { data: fileData, error: fileError } = await supabase.storage
-      .from('documents')
-      .download(answerKeyData.file_path);
-    
-    if (fileError) {
-      return NextResponse.json(
-        { error: 'File download failed' },
-        { status: 400 }
-      );
-    }
-    
-    // 2. แปลงไฟล์เป็นข้อความ
-    const fileContent = await fileData.text();
-    
-    // 3. ตรวจสอบ Milvus embeddings
+    // Check if we need to delete existing embeddings
     const milvusClient = await getMilvusClient();
     
     if (recreate) {
-      // ลบ embeddings เก่า
-      await milvusClient.delete({
-        collection_name: 'answer_key_embeddings',
-        filter: `answer_key_id == ${answerKeyId}`
-      });
-    } else {
-      // ตรวจสอบว่ามี embeddings อยู่แล้วหรือไม่
-      const searchResults = await milvusClient.search({
-        collection_name: 'answer_key_embeddings',
-        filter: `answer_key_id == ${answerKeyId}`,
-        limit: 1
-      });
-      
-      if (searchResults.results.length > 0) {
-        return NextResponse.json({ 
-          message: 'Embeddings already exist',
-          exists: true,
-          count: searchResults.results.length
+      // Delete existing embeddings
+      try {
+        await milvusClient.delete({
+          collection_name: 'answer_key_embeddings',
+          filter: `answer_key_id == ${answerKeyId}`
         });
+        console.log('Deleted existing embeddings');
+      } catch (deleteError) {
+        console.warn('Error deleting existing embeddings:', deleteError);
+        // Continue anyway as the embeddings might not exist
+      }
+    } else {
+      // Check if embeddings already exist
+      try {
+        const searchResults = await milvusClient.search({
+          collection_name: 'answer_key_embeddings',
+          filter: `answer_key_id == ${answerKeyId}`,
+          limit: 1
+        });
+        
+        if (searchResults.results.length > 0) {
+          return NextResponse.json({ 
+            message: 'Embeddings already exist',
+            exists: true,
+            count: searchResults.results.length
+          });
+        }
+      } catch (searchError) {
+        console.warn('Error checking for existing embeddings:', searchError);
+        // Continue anyway as the collection might not exist yet
       }
     }
     
-    // 4. แบ่งเนื้อหาเป็นส่วนๆ (chunking)
+    // Break content into chunks
     const chunks = chunkText(fileContent, 1000, 200);
     
-    // 5. สร้าง embeddings และบันทึกใน Milvus
+    if (chunks.length === 0) {
+      return NextResponse.json({ 
+        error: 'No content to create embeddings from', 
+        details: 'The file may be empty or not contain extractable text'
+      }, { status: 400 });
+    }
+    
+    // Create embeddings for each chunk
     const embeddingsPromises = chunks.map(async (chunk, index) => {
-      const embedding = await createEmbeddings(chunk);
-      
-      return {
-        answer_key_id: answerKeyId,
-        content_chunk: chunk,
-        embedding: embedding,
-        metadata: JSON.stringify({
-          file_name: answerKeyData.file_name,
-          subject_id: answerKeyData.subject_id,
-          term_id: answerKeyData.term_id,
-          chunk_index: index
-        })
-      };
+      try {
+        const embedding = await createEmbeddings(chunk);
+        
+        return {
+          answer_key_id: answerKeyId,
+          content_chunk: chunk,
+          embedding: embedding,
+          metadata: JSON.stringify({
+            file_name: answerKeyData.file_name,
+            subject_id: answerKeyData.subject_id,
+            term_id: answerKeyData.term_id,
+            chunk_index: index
+          })
+        };
+      } catch (error) {
+        console.error(`Error creating embedding for chunk ${index}:`, error);
+        // Return null for failed embeddings
+        return null;
+      }
     });
     
     const embeddingsData = await Promise.all(embeddingsPromises);
     
-    // บันทึกลงใน Milvus
-    await milvusClient.insert({
-      collection_name: 'answer_key_embeddings',
-      fields_data: embeddingsData
-    });
+    // Filter out failed embeddings
+    const validEmbeddings = embeddingsData.filter(embedding => embedding !== null);
     
-    // อัพเดทสถานะใน Supabase
-    await supabase
+    if (validEmbeddings.length === 0) {
+      return NextResponse.json({ 
+        error: 'Failed to create any valid embeddings', 
+      }, { status: 500 });
+    }
+    
+    // Insert embeddings into Milvus
+    try {
+      const insertResult = await milvusClient.insert({
+        collection_name: 'answer_key_embeddings',
+        fields_data: validEmbeddings
+      });
+      
+      console.log('Inserted embeddings:', insertResult);
+    } catch (insertError) {
+      return NextResponse.json({ 
+        error: 'Failed to insert embeddings into Milvus', 
+        details: insertError.message
+      }, { status: 500 });
+    }
+    
+    // Update answer key status in database
+    const { error: updateStatusError } = await supabase
       .from('answer_keys')
       .update({ 
         has_embeddings: true,
-        embeddings_count: chunks.length,
+        embeddings_count: validEmbeddings.length,
         updated_at: new Date().toISOString()
       })
       .eq('answer_key_id', answerKeyId);
     
+    if (updateStatusError) {
+      console.warn('Could not update embedding status:', updateStatusError);
+    }
+    
     return NextResponse.json({ 
       message: 'Embeddings created successfully',
-      chunks_count: chunks.length
+      chunks_count: chunks.length,
+      embeddings_count: validEmbeddings.length
     });
     
   } catch (error) {
     console.error('Server error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error', details: error.message }, { status: 500 });
   }
 }
 
-// ฟังก์ชันแบ่งข้อความเป็นส่วนๆ
+// Utility function to break text into chunks
 function chunkText(text, chunkSize, overlap) {
+  if (!text || typeof text !== 'string') {
+    console.warn('Invalid text provided for chunking:', text);
+    return [];
+  }
+  
   const chunks = [];
   let startIndex = 0;
   
@@ -173,6 +222,7 @@ function chunkText(text, chunkSize, overlap) {
     chunks.push(text.slice(startIndex, endIndex));
     startIndex = endIndex - overlap;
     
+    // If next chunk would be too small, stop
     if (startIndex + chunkSize - overlap >= text.length) {
       break;
     }
