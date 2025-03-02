@@ -1,8 +1,5 @@
+// src/lib/pdf.js
 import * as pdfjs from 'pdfjs-dist';
-
-// Set up PDF.js worker
-const pdfjsWorker = await import('pdfjs-dist/build/pdf.worker.entry');
-pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 /**
  * Extract text from a PDF file
@@ -11,6 +8,12 @@ pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker;
  */
 export async function extractTextFromPDF(pdfBuffer) {
   try {
+    // Set up PDF.js worker on-demand
+    if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+      const pdfjsWorker = await import('pdfjs-dist/build/pdf.worker.entry');
+      pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker.default;
+    }
+    
     // Load the PDF document
     const pdf = await pdfjs.getDocument({data: pdfBuffer}).promise;
     
@@ -20,8 +23,30 @@ export async function extractTextFromPDF(pdfBuffer) {
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
-      const pageText = textContent.items.map(item => item.str).join(' ');
-      extractedText += pageText + '\n\n';
+      
+      // Join items with proper spacing
+      let lastY = null;
+      let lastItem = null;
+      const PAGE_TEXT = textContent.items.reduce((text, item) => {
+        // Check if we need to add a new line
+        if (lastItem && lastY !== null) {
+          const currentY = item.transform[5]; // Y position of the current item
+          // If Y position changed significantly, add a new line
+          if (Math.abs(currentY - lastY) > 5) {
+            text += '\n';
+          } else if (lastItem.str && !lastItem.str.endsWith(' ')) {
+            // Add space between items on same line if needed
+            text += ' ';
+          }
+        }
+        
+        lastY = item.transform[5];
+        lastItem = item;
+        text += item.str;
+        return text;
+      }, '');
+      
+      extractedText += PAGE_TEXT + '\n\n';
     }
     
     return extractedText;

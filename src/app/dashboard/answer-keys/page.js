@@ -84,56 +84,60 @@ export default function AnswerKeysPage() {
     setFile(selectedFile);
   };
 
-  const handleUpload = async (e) => {
-    e.preventDefault();
-    
-    if (!file || !selectedSubject || !selectedTerm) {
-      setError('กรุณาเลือกไฟล์, วิชา และเทอมเรียน');
-      return;
-    }
-    
-    try {
-      setUploading(true);
-      setError(null);
+    const handleUpload = async (e) => {
+      e.preventDefault();
       
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('subjectId', selectedSubject);
-      formData.append('termId', selectedTerm);
-      
-      const response = await fetch('/api/answer-keys', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'เกิดข้อผิดพลาดในการอัปโหลดไฟล์');
+      if (!file || !selectedSubject || !selectedTerm) {
+        setError('กรุณาเลือกไฟล์, วิชา และเทอมเรียน');
+        return;
       }
       
-      // อัปเดตรายการไฟล์เฉลย
-      setAnswerKeys(prevKeys => [data.answerKey, ...prevKeys]);
-      
-      // รีเซ็ตฟอร์ม
-      setFile(null);
-      setSelectedSubject('');
-      setSelectedTerm('');
-      document.getElementById('file-upload').value = '';
-      
-      setSuccessMessage('อัปโหลดไฟล์เฉลยสำเร็จ');
-      
-      // ซ่อนข้อความสำเร็จหลังจาก 3 วินาที
-      setTimeout(() => {
-        setSuccessMessage(null);
-      }, 3000);
-    } catch (error) {
-      console.error('Error uploading file:', error);
-      setError(error.message);
-    } finally {
-      setUploading(false);
-    }
-  };
+      try {
+        setUploading(true);
+        setError(null);
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('subjectId', selectedSubject);
+        formData.append('termId', selectedTerm);
+        
+        const response = await fetch('/api/answer-keys', {
+          method: 'POST',
+          body: formData,
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.error || 'เกิดข้อผิดพลาดในการอัปโหลดไฟล์');
+        }
+        
+        // อัปเดตรายการไฟล์เฉลย พร้อมค่า has_embeddings ที่อัปเดตจาก API
+        setAnswerKeys(prevKeys => [data.answerKey, ...prevKeys]);
+        
+        // รีเซ็ตฟอร์ม
+        setFile(null);
+        setSelectedSubject('');
+        setSelectedTerm('');
+        document.getElementById('file-upload').value = '';
+        
+        setSuccessMessage(
+          data.answerKey.has_embeddings 
+            ? 'อัปโหลดไฟล์เฉลยและสร้าง Embeddings สำเร็จ'
+            : 'อัปโหลดไฟล์เฉลยสำเร็จ แต่ยังไม่ได้สร้าง Embeddings'
+        );
+        
+        // ซ่อนข้อความสำเร็จหลังจาก 3 วินาที
+        setTimeout(() => {
+          setSuccessMessage(null);
+        }, 3000);
+      } catch (error) {
+        console.error('Error uploading file:', error);
+        setError(error.message);
+      } finally {
+        setUploading(false);
+      }
+    };
 
   const handleDeleteAnswerKey = async (answerKeyId) => {
     if (!confirm('คุณต้องการลบไฟล์เฉลยนี้ใช่หรือไม่?')) {

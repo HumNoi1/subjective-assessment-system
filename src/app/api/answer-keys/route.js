@@ -1,5 +1,9 @@
+// src/app/api/answer-keys/route.js
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
+import { createEmbeddings } from '@/lib/llm';
+import { getMilvusClient } from '@/lib/milvus';
+import { extractTextFromPDF } from '@/lib/pdf';
 
 export async function POST(request) {
   try {
@@ -49,8 +53,20 @@ export async function POST(request) {
     
     const publicUrl = publicUrlData.publicUrl;
     
-    // IMPORTANT CHANGE: For PDFs, we don't try to extract content
-    // Instead, we store a placeholder in the content field
+    // Extract text content based on file type
+    let fileContent;
+    const fileExtension = originalName.split('.').pop().toLowerCase();
+    const isPDF = fileExtension === 'pdf';
+    
+    if (isPDF) {
+      // Extract text from PDF
+      fileContent = await extractTextFromPDF(fileBuffer);
+    } else {
+      // For text files, decode directly
+      fileContent = new TextDecoder('utf-8').decode(fileArray);
+    }
+    
+    // Save answer key information to database
     const { data: answerKeyData, error: answerKeyError } = await supabase
       .from('answer_keys')
       .insert([
@@ -59,12 +75,11 @@ export async function POST(request) {
           file_path: filePath,
           file_url: publicUrl,
           file_size: file.size,
-          // Use placeholder for content instead of actual file content
-          content: `[Binary file stored at ${filePath}]`,  
+          content: fileContent || `[Binary file stored at ${filePath}]`,
           subject_id: subjectId,
           term_id: termId,
           milvus_collection_name: 'answer_key_embeddings',
-          has_embeddings: false
+          has_embeddings: false // จะอัปเดตเป็น true หลังจากสร้าง embeddings
         }
       ])
       .select();
@@ -72,6 +87,58 @@ export async function POST(request) {
     if (answerKeyError) {
       console.error('Database error:', answerKeyError);
       return NextResponse.json({ error: 'Database error', details: answerKeyError }, { status: 400 });
+    }
+    
+    // สร้าง embeddings อัตโนมัติหลังจากบันทึกข้อมูล
+    try {
+      const answerKeyId = answerKeyData[0].answer_key_id;
+      
+      // ตัดแบ่งเนื้อหาเป็นส่วน ๆ (chunks)
+      const chunks = chunkText(fileContent, 1000, 200);
+      
+      if (chunks.length > 0) {
+        // สร้าง embeddings สำหรับแต่ละ chunk
+        const milvusClient = await getMilvusClient();
+        const embeddingsPromises = chunks.map(async (chunk, index) => {
+          const embedding = await createEmbeddings(chunk);
+          return {
+            answer_key_id: answerKeyId,
+            content_chunk: chunk,
+            embedding: embedding,
+            metadata: JSON.stringify({
+              file_name: originalName,
+              subject_id: subjectId,
+              term_id: termId,
+              chunk_index: index
+            })
+          };
+        });
+        
+        const embeddingsData = await Promise.all(embeddingsPromises);
+        
+        // บันทึก embeddings ลงใน Milvus
+        await milvusClient.insert({
+          collection_name: 'answer_key_embeddings',
+          fields_data: embeddingsData
+        });
+        
+        // อัพเดทสถานะ has_embeddings เป็น true
+        await supabase
+          .from('answer_keys')
+          .update({ 
+            has_embeddings: true,
+            embeddings_count: embeddingsData.length,
+            updated_at: new Date().toISOString()
+          })
+          .eq('answer_key_id', answerKeyId);
+        
+        // อัพเดตข้อมูลที่จะส่งกลับให้มี has_embeddings เป็น true
+        answerKeyData[0].has_embeddings = true;
+        answerKeyData[0].embeddings_count = embeddingsData.length;
+      }
+    } catch (embeddingError) {
+      console.error('Error creating embeddings:', embeddingError);
+      // ไม่ส่ง error กลับไปเพื่อให้การอัปโหลดไฟล์สำเร็จ แม้ว่าการสร้าง embeddings จะล้มเหลว
     }
     
     return NextResponse.json({ 
@@ -83,4 +150,28 @@ export async function POST(request) {
     console.error('Server error:', error);
     return NextResponse.json({ error: 'Internal server error', details: error.message }, { status: 500 });
   }
+}
+
+// Utility function ตัดแบ่งข้อความเป็นส่วน ๆ
+function chunkText(text, chunkSize, overlap) {
+  if (!text || typeof text !== 'string') {
+    console.warn('Invalid text provided for chunking:', text);
+    return [];
+  }
+  
+  const chunks = [];
+  let startIndex = 0;
+  
+  while (startIndex < text.length) {
+    const endIndex = Math.min(startIndex + chunkSize, text.length);
+    chunks.push(text.slice(startIndex, endIndex));
+    startIndex = endIndex - overlap;
+    
+    // If next chunk would be too small, stop
+    if (startIndex + chunkSize - overlap >= text.length) {
+      break;
+    }
+  }
+  
+  return chunks;
 }

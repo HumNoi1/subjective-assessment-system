@@ -1,33 +1,40 @@
 import OpenAI from 'openai';
 
+// Initialize the OpenAI client
 const openai = new OpenAI({
   baseURL: process.env.LMSTUDIO_API_URL || 'http://localhost:1234/v1',
-  apiKey: process.env.LMSTUDIO_API_KEY || 'lm-studio', // ค่าเริ่มต้นสำหรับ LMStudio
-  timeout: 60000, // 60 วินาที
- });
+  apiKey: process.env.LMSTUDIO_API_KEY || 'lm-studio', // default for LMStudio
+  timeout: 60000, // 60 seconds
+});
 
-// สร้าง Embeddings
+// Create embeddings
 export async function createEmbeddings(text) {
   try {
-    // ตรวจสอบ text เป็น string
+    // Ensure text is a string
     if (typeof text !== 'string') {
       console.warn('Input to createEmbeddings is not a string:', typeof text);
+      text = String(text);
     }
 
+    // Call the embeddings API
     const response = await openai.embeddings.create({
-      model: "text-embedding-bge-m3@q4_k_m", // เปลี่ยนเป็น model text-embedding-bge-m3@q4_k_m
+      model: "text-embedding-bge-m3@q4_k_m", // Use a model available in LMStudio
       input: text,
-      encoding_format: "float"
     });
 
-    return response[0].embedding;
+    // Check if response is valid
+    if (!response || !response.data || !response.data[0]) {
+      throw new Error('Invalid embedding response from API');
+    }
+
+    return response.data[0].embedding;
   } catch (error) {
     console.error('Error creating embeddings:', error);
-    throw new error('Failed to create embeddings. Please check your LLM service connection.');
+    throw new Error('Failed to create embeddings. Please check your LLM service connection.');
   }
 }
 
-// ตรวจคำตอบโดย LLM
+// Check answer using LLM
 export async function checkAnswer(studentAnswer, answerKey) {
   const prompt = `
 ฉันกำลังตรวจข้อสอบอัตนัย โปรดเปรียบเทียบคำตอบของนักเรียนกับเฉลย
@@ -50,14 +57,19 @@ ${studentAnswer}
 4. ข้อเสนอแนะเพื่อการพัฒนา
 `;
 
-  const response = await openai.chat.completions.create({
-    model: "llama-3.2-3b-instruct", // เปลี่ยนเป็น model llama3.2-3b
-    messages: [
-      { role: "system", content: "คุณเป็นผู้ช่วยตรวจข้อสอบอัตนัยที่มีความเชี่ยวชาญ มีความเที่ยงตรงและยุติธรรมในการประเมิน" },
-      { role: "user", content: prompt }
-    ],
-    temperature: 0.2,
-  });
-  
-  return response.choices[0].message.content;
+  try {
+    const response = await openai.chat.completions.create({
+      model: "llama-3.2-3b-instruct", // Using a model supported by LMStudio
+      messages: [
+        { role: "system", content: "คุณเป็นผู้ช่วยตรวจข้อสอบอัตนัยที่มีความเชี่ยวชาญ มีความเที่ยงตรงและยุติธรรมในการประเมิน" },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.2,
+    });
+    
+    return response.choices[0].message.content;
+  } catch (error) {
+    console.error('Error checking answer:', error);
+    throw new Error('Failed to check answer. Please check your LLM service connection.');
+  }
 }
