@@ -33,10 +33,12 @@ export default function ClassesPage() {
         const { data: teacherData } = await supabase
           .from('teachers')
           .select('*')
-          .eq('user_id', session.user.id)
+          .eq('teacher_id', session.user.id)
           .single();
         
         if (teacherData) {
+
+          // save data teacher id
           setTeacherId(teacherData.teacher_id);
           
           // ดึงข้อมูลชั้นเรียน
@@ -45,6 +47,8 @@ export default function ClassesPage() {
             .select('*')
             .eq('teacher_id', teacherData.teacher_id)
             .order('academic_year', { ascending: false });
+
+          console.log("classesData:", classesData);
           
           if (classesError) {
             throw classesError;
@@ -81,9 +85,9 @@ export default function ClassesPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          className,
-          academicYear,
-          teacherId
+          className: className,
+          academicYear: academicYear,
+          teacherId: teacherId
         }),
       });
       
@@ -261,7 +265,7 @@ export default function ClassesPage() {
                 type="text"
                 value={className}
                 onChange={(e) => setClassName(e.target.value)}
-                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black"
                 placeholder="เช่น ม.6/1"
                 required
               />
@@ -275,7 +279,7 @@ export default function ClassesPage() {
                 type="text"
                 value={academicYear}
                 onChange={(e) => setAcademicYear(e.target.value)}
-                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black"
                 placeholder="เช่น 2566"
                 required
               />

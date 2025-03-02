@@ -273,7 +273,7 @@ export default function SubjectsPage() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-bold mb-6">จัดการวิชาเรียน</h1>
+      <h1 className="text-2xl font-bold mb-6 text-black">จัดการวิชาเรียน</h1>
       
       {/* แสดงข้อความผิดพลาด */}
       {error && (
@@ -291,7 +291,7 @@ export default function SubjectsPage() {
       
       {/* ฟอร์มสร้าง/แก้ไขวิชา */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-        <h2 className="text-lg font-semibold mb-4">
+        <h2 className="text-lg font-semibold mb-4 text-black">
           {currentSubjectId ? 'แก้ไขวิชา' : 'สร้างวิชาใหม่'}
         </h2>
         
@@ -305,7 +305,7 @@ export default function SubjectsPage() {
                 type="text"
                 value={subjectName}
                 onChange={(e) => setSubjectName(e.target.value)}
-                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black"
                 placeholder="เช่น คณิตศาสตร์"
                 required
               />
@@ -319,7 +319,7 @@ export default function SubjectsPage() {
                 type="text"
                 value={subjectCode}
                 onChange={(e) => setSubjectCode(e.target.value)}
-                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black"
                 placeholder="เช่น ค33101"
                 required
               />
@@ -330,7 +330,7 @@ export default function SubjectsPage() {
                 ชั้นเรียน
               </label>
               <select
-                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black"
                 value={selectedClass}
                 onChange={(e) => setSelectedClass(e.target.value)}
                 required
@@ -377,7 +377,7 @@ export default function SubjectsPage() {
       {/* รายการวิชา */}
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold">รายการวิชาทั้งหมด</h2>
+          <h2 className="text-lg font-semibold text-black">รายการวิชาทั้งหมด</h2>
         </div>
         
         {subjects.length === 0 ? (

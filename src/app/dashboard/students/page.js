@@ -1,20 +1,21 @@
-// src/app/dashboard/terms/page.js
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
-export default function TermsPage() {
-  const [terms, setTerms] = useState([]);
+export default function StudentsPage() {
+  const [students, setStudents] = useState([]);
+  const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [termName, setTermName] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [currentTermId, setCurrentTermId] = useState(null);
+  const [teacherId, setTeacherId] = useState(null);
+  const [studentName, setStudentName] = useState('');
+  const [studentEmail, setStudentEmail] = useState('');
+  const [selectedClass, setSelectedClass] = useState('');
+  const [currentStudentId, setCurrentStudentId] = useState(null);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
   const router = useRouter();
@@ -30,19 +31,34 @@ export default function TermsPage() {
           return;
         }
         
-        // ดึงข้อมูลเทอมเรียน
-        const { data: termsData, error: termsError } = await supabase
-          .from('terms')
+        const { data: teacherData } = await supabase
+          .from('teachers')
           .select('*')
-          .order('start_date', { ascending: false });
+          .eq('teacher_id', session.user.id)
+          .single();
         
-        if (termsError) {
-          throw termsError;
+        if (teacherData) {
+          setTeacherId(teacherData.teacher_id);
+          
+          // ดึงข้อมูลชั้นเรียนที่อาจารย์รับผิดชอบ
+          const { data: classesData } = await supabase
+            .from('classes')
+            .select('*')
+            .eq('teacher_id', teacherData.teacher_id)
+            .order('academic_year', { ascending: false });
+          
+          setClasses(classesData || []);
+          
+          // ดึงข้อมูลนักเรียนในชั้นเรียนที่อาจารย์รับผิดชอบ
+          const { data: studentsData } = await supabase
+            .from('students')
+            .select('*, classes(class_name, academic_year)')
+            .in('class_id', classesData?.map(cls => cls.class_id) || []);
+          
+          setStudents(studentsData || []);
         }
-        
-        setTerms(termsData || []);
       } catch (error) {
-        console.error('Error fetching terms:', error);
+        console.error('Error fetching students:', error);
         setError('เกิดข้อผิดพลาดในการโหลดข้อมูล');
       } finally {
         setLoading(false);
@@ -52,16 +68,11 @@ export default function TermsPage() {
     fetchData();
   }, [router]);
 
-  const handleCreateTerm = async (e) => {
+  const handleCreateStudent = async (e) => {
     e.preventDefault();
     
-    if (!termName || !startDate || !endDate) {
+    if (!studentName || !studentEmail || !selectedClass) {
       setError('กรุณากรอกข้อมูลให้ครบถ้วน');
-      return;
-    }
-    
-    if (new Date(endDate) <= new Date(startDate)) {
-      setError('วันที่สิ้นสุดต้องมากกว่าวันที่เริ่มต้น');
       return;
     }
     
@@ -69,56 +80,63 @@ export default function TermsPage() {
       setCreating(true);
       setError(null);
       
-      const response = await fetch('/api/terms', {
+      const response = await fetch('/api/students', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          termName,
-          startDate,
-          endDate
+          name: studentName,
+          email: studentEmail,
+          classId: selectedClass
         }),
       });
       
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.error || 'เกิดข้อผิดพลาดในการสร้างเทอมเรียน');
+        throw new Error(data.error || 'เกิดข้อผิดพลาดในการเพิ่มนักเรียน');
       }
       
-      // อัปเดตรายการเทอมเรียน
-      setTerms(prevTerms => [data.term, ...prevTerms]);
+      // หาชั้นเรียนของนักเรียน
+      const classInfo = classes.find(cls => cls.class_id.toString() === selectedClass);
+      
+      // อัปเดตรายการนักเรียน
+      setStudents(prevStudents => [
+        {
+          ...data.student,
+          classes: {
+            class_name: classInfo?.class_name,
+            academic_year: classInfo?.academic_year
+          }
+        },
+        ...prevStudents
+      ]);
       
       // รีเซ็ตฟอร์ม
-      setTermName('');
-      setStartDate('');
-      setEndDate('');
+      setStudentName('');
+      setStudentEmail('');
+      setSelectedClass('');
       
-      setSuccessMessage('สร้างเทอมเรียนสำเร็จ');
+      setSuccessMessage('เพิ่มนักเรียนสำเร็จ');
       
       // ซ่อนข้อความสำเร็จหลังจาก 3 วินาที
       setTimeout(() => {
         setSuccessMessage(null);
       }, 3000);
     } catch (error) {
-      console.error('Error creating term:', error);
+      console.error('Error creating student:', error);
       setError(error.message);
     } finally {
       setCreating(false);
     }
   };
 
-  const handleEditTerm = async (e) => {
+  const handleEditStudent = async (e) => {
     e.preventDefault();
     
-    if (!termName || !startDate || !endDate) {
+    if (!studentName || !studentEmail || !selectedClass) {
       setError('กรุณากรอกข้อมูลให้ครบถ้วน');
-      return;
-    }
-    
-    if (new Date(endDate) <= new Date(startDate)) {
-      setError('วันที่สิ้นสุดต้องมากกว่าวันที่เริ่มต้น');
       return;
     }
     
@@ -126,53 +144,64 @@ export default function TermsPage() {
       setEditing(true);
       setError(null);
       
-      const response = await fetch(`/api/terms/${currentTermId}`, {
+      const response = await fetch(`/api/students/${currentStudentId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          termName,
-          startDate,
-          endDate
+          name: studentName,
+          email: studentEmail,
+          classId: selectedClass
         }),
       });
       
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.error || 'เกิดข้อผิดพลาดในการแก้ไขเทอมเรียน');
+        throw new Error(data.error || 'เกิดข้อผิดพลาดในการแก้ไขข้อมูลนักเรียน');
       }
       
-      // อัปเดตรายการเทอมเรียน
-      setTerms(prevTerms => 
-        prevTerms.map(term => 
-          term.term_id === currentTermId ? data.term : term
+      // หาชั้นเรียนของนักเรียน
+      const classInfo = classes.find(cls => cls.class_id.toString() === selectedClass);
+      
+      // อัปเดตรายการนักเรียน
+      setStudents(prevStudents => 
+        prevStudents.map(student => 
+          student.student_id === currentStudentId 
+            ? {
+                ...data.student,
+                classes: {
+                  class_name: classInfo?.class_name,
+                  academic_year: classInfo?.academic_year
+                }
+              } 
+            : student
         )
       );
       
       // รีเซ็ตฟอร์ม
-      setTermName('');
-      setStartDate('');
-      setEndDate('');
-      setCurrentTermId(null);
+      setStudentName('');
+      setStudentEmail('');
+      setSelectedClass('');
+      setCurrentStudentId(null);
       
-      setSuccessMessage('แก้ไขเทอมเรียนสำเร็จ');
+      setSuccessMessage('แก้ไขข้อมูลนักเรียนสำเร็จ');
       
       // ซ่อนข้อความสำเร็จหลังจาก 3 วินาที
       setTimeout(() => {
         setSuccessMessage(null);
       }, 3000);
     } catch (error) {
-      console.error('Error editing term:', error);
+      console.error('Error editing student:', error);
       setError(error.message);
     } finally {
       setEditing(false);
     }
   };
 
-  const handleDeleteTerm = async (termId) => {
-    if (!confirm('คุณต้องการลบเทอมเรียนนี้ใช่หรือไม่?')) {
+  const handleDeleteStudent = async (studentId) => {
+    if (!confirm('คุณต้องการลบข้อมูลนักเรียนนี้ใช่หรือไม่?')) {
       return;
     }
     
@@ -180,56 +209,47 @@ export default function TermsPage() {
       setDeleting(true);
       setError(null);
       
-      const response = await fetch(`/api/terms/${termId}`, {
+      const response = await fetch(`/api/students/${studentId}`, {
         method: 'DELETE',
       });
       
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.error || 'เกิดข้อผิดพลาดในการลบเทอมเรียน');
+        throw new Error(data.error || 'เกิดข้อผิดพลาดในการลบข้อมูลนักเรียน');
       }
       
-      // อัปเดตรายการเทอมเรียน
-      setTerms(prevTerms => 
-        prevTerms.filter(term => term.term_id !== termId)
+      // อัปเดตรายการนักเรียน
+      setStudents(prevStudents => 
+        prevStudents.filter(student => student.student_id !== studentId)
       );
       
-      setSuccessMessage('ลบเทอมเรียนสำเร็จ');
+      setSuccessMessage('ลบข้อมูลนักเรียนสำเร็จ');
       
       // ซ่อนข้อความสำเร็จหลังจาก 3 วินาที
       setTimeout(() => {
         setSuccessMessage(null);
       }, 3000);
     } catch (error) {
-      console.error('Error deleting term:', error);
+      console.error('Error deleting student:', error);
       setError(error.message);
     } finally {
       setDeleting(false);
     }
   };
 
-  const handleEditClick = (term) => {
-    setTermName(term.term_name);
-    setStartDate(term.start_date);
-    setEndDate(term.end_date);
-    setCurrentTermId(term.term_id);
+  const handleEditClick = (student) => {
+    setStudentName(student.name);
+    setStudentEmail(student.email);
+    setSelectedClass(student.class_id.toString());
+    setCurrentStudentId(student.student_id);
   };
 
   const handleCancelEdit = () => {
-    setTermName('');
-    setStartDate('');
-    setEndDate('');
-    setCurrentTermId(null);
-  };
-
-  // ตรวจสอบว่าเทอมไหนกำลังใช้งานอยู่
-  const isActiveTerm = (term) => {
-    const today = new Date();
-    const startDate = new Date(term.start_date);
-    const endDate = new Date(term.end_date);
-    
-    return today >= startDate && today <= endDate;
+    setStudentName('');
+    setStudentEmail('');
+    setSelectedClass('');
+    setCurrentStudentId(null);
   };
 
   if (loading) {
@@ -242,7 +262,7 @@ export default function TermsPage() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-bold mb-6 text-black">จัดการเทอมเรียน</h1>
+      <h1 className="text-2xl font-bold mb-6 text-black">จัดการข้อมูลนักเรียน</h1>
       
       {/* แสดงข้อความผิดพลาด */}
       {error && (
@@ -258,57 +278,64 @@ export default function TermsPage() {
         </div>
       )}
       
-      {/* ฟอร์มสร้าง/แก้ไขเทอมเรียน */}
+      {/* ฟอร์มเพิ่ม/แก้ไขนักเรียน */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-8">
         <h2 className="text-lg font-semibold mb-4 text-black">
-          {currentTermId ? 'แก้ไขเทอมเรียน' : 'สร้างเทอมเรียนใหม่'}
+          {currentStudentId ? 'แก้ไขข้อมูลนักเรียน' : 'เพิ่มนักเรียนใหม่'}
         </h2>
         
-        <form onSubmit={currentTermId ? handleEditTerm : handleCreateTerm} className="space-y-4">
+        <form onSubmit={currentStudentId ? handleEditStudent : handleCreateStudent} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                ชื่อเทอม
+                ชื่อ-นามสกุล
               </label>
               <input
                 type="text"
-                value={termName}
-                onChange={(e) => setTermName(e.target.value)}
+                value={studentName}
+                onChange={(e) => setStudentName(e.target.value)}
                 className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black"
-                placeholder="เช่น ภาคเรียนที่ 1/2566"
+                placeholder="ชื่อ-นามสกุลนักเรียน"
                 required
               />
             </div>
             
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                วันที่เริ่มต้น
+                อีเมล
               </label>
               <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                type="email"
+                value={studentEmail}
+                onChange={(e) => setStudentEmail(e.target.value)}
                 className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black"
+                placeholder="อีเมลนักเรียน"
                 required
               />
             </div>
             
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                วันที่สิ้นสุด
+                ชั้นเรียน
               </label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+              <select
                 className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black"
+                value={selectedClass}
+                onChange={(e) => setSelectedClass(e.target.value)}
                 required
-              />
+              >
+                <option value="">เลือกชั้นเรียน</option>
+                {classes.map((cls) => (
+                  <option key={cls.class_id} value={cls.class_id}>
+                    {cls.class_name} (ปีการศึกษา {cls.academic_year})
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
           
           <div className="flex justify-end space-x-2">
-            {currentTermId && (
+            {currentStudentId && (
               <button
                 type="button"
                 onClick={handleCancelEdit}
@@ -326,25 +353,25 @@ export default function TermsPage() {
               {(creating || editing) ? (
                 <>
                   <span className="animate-spin inline-block h-4 w-4 border-t-2 border-white rounded-full mr-2"></span>
-                  {currentTermId ? 'กำลังแก้ไข...' : 'กำลังสร้าง...'}
+                  {currentStudentId ? 'กำลังแก้ไข...' : 'กำลังเพิ่ม...'}
                 </>
               ) : (
-                currentTermId ? 'แก้ไขเทอมเรียน' : 'สร้างเทอมเรียน'
+                currentStudentId ? 'แก้ไขข้อมูลนักเรียน' : 'เพิ่มนักเรียน'
               )}
             </button>
           </div>
         </form>
       </div>
       
-      {/* รายการเทอมเรียน */}
+      {/* รายการนักเรียน */}
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-black">รายการเทอมเรียนทั้งหมด</h2>
+          <h2 className="text-lg font-semibold text-black">รายชื่อนักเรียนทั้งหมด</h2>
         </div>
         
-        {terms.length === 0 ? (
+        {students.length === 0 ? (
           <div className="p-6 text-center text-gray-500">
-            ไม่มีรายการเทอมเรียน
+            ไม่มีรายชื่อนักเรียน
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -352,16 +379,13 @@ export default function TermsPage() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    ชื่อเทอม
+                    ชื่อ-นามสกุล
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    วันที่เริ่มต้น
+                    อีเมล
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    วันที่สิ้นสุด
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    สถานะ
+                    ชั้นเรียน
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     จัดการ
@@ -369,56 +393,48 @@ export default function TermsPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {terms.map((term) => (
-                  <tr key={term.term_id} className="hover:bg-gray-50">
+                {students.map((student) => (
+                  <tr key={student.student_id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
-                        {term.term_name}
+                        {student.name}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
-                        {new Date(term.start_date).toLocaleDateString('th-TH')}
+                        {student.email}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
-                        {new Date(term.end_date).toLocaleDateString('th-TH')}
+                        {student.classes?.class_name} ({student.classes?.academic_year})
                       </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        isActiveTerm(term) 
-                          ? 'bg-green-100 text-green-800' 
-                          : new Date(term.start_date) > new Date()
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {isActiveTerm(term) 
-                          ? 'กำลังใช้งาน' 
-                          : new Date(term.start_date) > new Date()
-                            ? 'กำลังจะมาถึง'
-                            : 'สิ้นสุดแล้ว'}
-                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-3">
                         <button
-                          onClick={() => router.push(`/dashboard/terms/${term.term_id}/answer-keys`)}
+                          onClick={() => router.push(`/dashboard/students/${student.student_id}/answers`)}
                           className="text-blue-600 hover:text-blue-900"
                         >
-                          ไฟล์เฉลย
+                          คำตอบ
                         </button>
                         
                         <button
-                          onClick={() => handleEditClick(term)}
+                          onClick={() => router.push(`/dashboard/students/${student.student_id}/assessments`)}
+                          className="text-green-600 hover:text-green-900"
+                        >
+                          การประเมิน
+                        </button>
+                        
+                        <button
+                          onClick={() => handleEditClick(student)}
                           className="text-yellow-600 hover:text-yellow-900"
                         >
                           แก้ไข
                         </button>
                         
                         <button
-                          onClick={() => handleDeleteTerm(term.term_id)}
+                          onClick={() => handleDeleteStudent(student.student_id)}
                           disabled={deleting}
                           className="text-red-600 hover:text-red-900 disabled:text-red-300 disabled:cursor-not-allowed"
                         >

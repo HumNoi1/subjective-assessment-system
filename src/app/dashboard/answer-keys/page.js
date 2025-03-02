@@ -176,7 +176,7 @@ export default function AnswerKeysPage() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-bold mb-6">จัดการไฟล์เฉลย</h1>
+      <h1 className="text-2xl font-bold mb-6 text-black">จัดการไฟล์เฉลย</h1>
       
       {/* แสดงข้อความผิดพลาด */}
       {error && (
@@ -194,7 +194,7 @@ export default function AnswerKeysPage() {
       
       {/* ฟอร์มอัปโหลดไฟล์เฉลย */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-        <h2 className="text-lg font-semibold mb-4">อัปโหลดไฟล์เฉลยใหม่</h2>
+        <h2 className="text-lg font-semibold mb-4 text-black">อัปโหลดไฟล์เฉลยใหม่</h2>
         
         <form onSubmit={handleUpload} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -208,7 +208,7 @@ export default function AnswerKeysPage() {
                 onChange={(e) => setSelectedSubject(e.target.value)}
                 required
               >
-                <option value="">เลือกวิชา</option>
+                <option value="" className="text-black">เลือกวิชา</option>
                 {subjects.map((subject) => (
                   <option key={subject.subject_id} value={subject.subject_id}>
                     {subject.subject_name} ({subject.subject_code})

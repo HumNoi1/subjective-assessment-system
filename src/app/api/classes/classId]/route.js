@@ -4,14 +4,14 @@ import { createServerClient } from '@/lib/supabase';
 // ดึงข้อมูลชั้นเรียนเฉพาะ
 export async function GET(request, { params }) {
   try {
-    const { id } = params;
+    const { class_id } = params;
     
     const supabase = await createServerClient();
     
     const { data, error } = await supabase
       .from('classes')
       .select('*')
-      .eq('class_id', id)
+      .eq('class_id', class_id)
       .single();
     
     if (error) {
@@ -34,7 +34,7 @@ export async function GET(request, { params }) {
 // อัพเดทข้อมูลชั้นเรียน
 export async function PUT(request, { params }) {
   try {
-    const { id } = params;
+    const { class_id } = params;
     const { className, academicYear } = await request.json();
     
     if (!className || !academicYear) {
@@ -52,7 +52,7 @@ export async function PUT(request, { params }) {
         class_name: className, 
         academic_year: academicYear 
       })
-      .eq('class_id', id)
+      .eq('class_id', class_id)
       .select();
     
     if (error) {
@@ -78,14 +78,14 @@ export async function PUT(request, { params }) {
 // ลบชั้นเรียน
 export async function DELETE(request, { params }) {
   try {
-    const { id } = params;
+    const { class_id } = params;
     
     const supabase = await createServerClient();
     
     const { error } = await supabase
       .from('classes')
       .delete()
-      .eq('class_id', id);
+      .eq('class_id', class_id);
     
     if (error) {
       return NextResponse.json(
