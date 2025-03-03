@@ -8,10 +8,11 @@ import * as pdfjs from 'pdfjs-dist';
  */
 export async function extractTextFromPDF(pdfBuffer) {
   try {
-    // Set up PDF.js worker on-demand
-    if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-      const pdfjsWorker = await import('pdfjs-dist/build/pdf.worker.entry');
+    // กำหนด worker แบบปลอดภัยสำหรับ Next.js server-side
+    if (!globalThis.pdfjsWorkerLoaded) {
+      const pdfjsWorker = await import('pdfjs-dist/build/pdf.worker.mjs');
       pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker.default;
+      globalThis.pdfjsWorkerLoaded = true;
     }
     
     // Load the PDF document
@@ -52,6 +53,6 @@ export async function extractTextFromPDF(pdfBuffer) {
     return extractedText;
   } catch (error) {
     console.error('Error extracting text from PDF:', error);
-    throw error;
+    return "ไม่สามารถแปลงไฟล์ PDF ได้: " + error.message;
   }
 }

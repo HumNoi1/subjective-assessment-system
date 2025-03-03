@@ -1,7 +1,7 @@
 // src/app/api/embeddings/answer-key/route.js
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { getMilvusClient } from '@/lib/milvus';
+import { createAnswerKeyCollection, getMilvusClient } from '@/lib/milvus';
 import { createEmbeddings } from '@/lib/llm';
 import { extractTextFromPDF } from '@/lib/pdf';
 
@@ -11,6 +11,16 @@ export async function POST(request) {
     
     if (!answerKeyId) {
       return NextResponse.json({ error: 'Answer key ID is required' }, { status: 400 });
+    }
+
+    try {
+      await createAnswerKeyCollection();
+    } catch (collectionError) {
+      console.error("Collection creation error", collectionError);
+      return NextResponse.json({
+        error: 'Failed to initialize Milvus collection',
+        details: collectionError.message
+      }, { status: 500 });
     }
     
     const supabase = await createServerClient();
