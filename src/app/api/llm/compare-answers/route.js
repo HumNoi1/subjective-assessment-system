@@ -1,18 +1,13 @@
 // src/app/api/llm/compare-answers/route.js
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import OpenAI from 'openai';
-
-// ใช้ OpenAI API เพื่อเชื่อมต่อกับ LMStudio
-const openai = new OpenAI({
-  baseURL: process.env.LMSTUDIO_API_URL || 'http://localhost:1234/v1',
-  apiKey: process.env.LMSTUDIO_API_KEY || 'lm-studio',
-});
+import { compareAnswers } from '@/lib/llm';
+import { queryAnswerKeyForAssessment } from '@/lib/llamaindex';
 
 export async function POST(request) {
   try {
     const startTime = Date.now();
-    const { studentAnswer, answerKey, studentAnswerId, answerKeyId } = await request.json();
+    const { studentAnswer, answerKey, studentAnswerId, answerKeyId, useLlamaIndex = true } = await request.json();
     
     if (!studentAnswer || !answerKey) {
       return NextResponse.json(
@@ -21,32 +16,26 @@ export async function POST(request) {
       );
     }
     
-    // สร้าง prompt สำหรับเปรียบเทียบ
-    const prompt = `
-ฉันต้องการเปรียบเทียบคำตอบของนักเรียนกับเฉลยอย่างละเอียด โปรดแสดง:
-1. ประเด็นที่ตรงกัน
-2. ประเด็นที่แตกต่าง
-3. ประเด็นที่ขาดหายไปในคำตอบนักเรียน
-4. ประเด็นเพิ่มเติมที่นักเรียนกล่าวถึงแต่ไม่อยู่ในเฉลย
-
-เฉลย:
-${answerKey}
-
-คำตอบนักเรียน:
-${studentAnswer}
-`;
-
-    // เรียกใช้ LLM
-    const response = await openai.chat.completions.create({
-      model: "llama3.2-3b",
-      messages: [
-        { role: "system", content: "คุณเป็นผู้ช่วยตรวจข้อสอบอัตนัยที่เชี่ยวชาญในการเปรียบเทียบคำตอบ" },
-        { role: "user", content: prompt }
-      ],
-      temperature: 0.3,
-    });
+    let result;
+    let relevantContent = null;
     
-    const result = response.choices[0].message.content;
+    // ใช้ LlamaIndex เพื่อค้นหาส่วนที่เกี่ยวข้องก่อนส่งไปให้ LLM
+    if (useLlamaIndex && answerKeyId) {
+      try {
+        const llamaIndexResult = await queryAnswerKeyForAssessment(studentAnswer, answerKeyId);
+        relevantContent = llamaIndexResult.relevantContent;
+        
+        // เปรียบเทียบคำตอบด้วย LLM โดยใช้เนื้อหาที่เกี่ยวข้องจาก LlamaIndex
+        result = await compareAnswers(studentAnswer, answerKey, relevantContent);
+      } catch (llamaIndexError) {
+        console.error('Error using LlamaIndex:', llamaIndexError);
+        // ถ้าเกิดข้อผิดพลาด ให้ใช้วิธีเดิม
+        result = await compareAnswers(studentAnswer, answerKey);
+      }
+    } else {
+      // วิธีเดิมไม่ใช้ LlamaIndex
+      result = await compareAnswers(studentAnswer, answerKey);
+    }
     
     // คำนวณเวลาที่ใช้
     const processingTime = (Date.now() - startTime) / 1000;
@@ -58,7 +47,7 @@ ${studentAnswer}
       await supabase.from('llm_usage_logs').insert([
         {
           operation_type: 'compare_answers',
-          input_text: prompt.substring(0, 500),
+          input_text: `Student Answer: ${studentAnswer.substring(0, 100)}... Answer Key: ${relevantContent ? 'Using LlamaIndex RAG' : 'Direct comparison'}`,
           output_text: result.substring(0, 500),
           processing_time: processingTime,
           token_count: result.split(' ').length
@@ -68,12 +57,14 @@ ${studentAnswer}
     
     return NextResponse.json({ 
       result,
-      processing_time: processingTime
+      processing_time: processingTime,
+      used_llamaindex: relevantContent !== null
     });
     
   } catch (error) {
+    console.error('Error comparing answers:', error);
     return NextResponse.json(
-      { error: error.message },
+      { error: error.message || 'เกิดข้อผิดพลาดในการเปรียบเทียบคำตอบ' },
       { status: 500 }
     );
   }

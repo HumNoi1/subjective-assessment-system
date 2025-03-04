@@ -4,6 +4,8 @@ import { createServerClient } from '@/lib/supabase';
 import { createEmbeddings } from '@/lib/llm';
 import { getMilvusClient } from '@/lib/milvus';
 import { extractTextFromPDF } from '@/lib/pdf';
+import { createDocumentFromText, createIndexWithChunks } from '@/lib/llamaindex';
+import { setCache } from '@/lib/cache';
 
 // อัปโหลดคำตอบของนักเรียนใหม่
 export async function POST(request) {
@@ -50,7 +52,8 @@ export async function POST(request) {
           answer_key_id: answerKeyId,
           folder_id: folderId,
           milvus_collection_name: 'student_answer_embeddings',
-          has_embeddings: false // จะอัปเดตเป็น true หลังจากสร้าง embeddings
+          has_embeddings: false, // จะอัปเดตเป็น true หลังจากสร้าง embeddings
+          llamaindex_processed: false // จะอัปเดตเป็น true หลังจากประมวลผลด้วย LlamaIndex
         }
       ])
       .select();
@@ -64,8 +67,25 @@ export async function POST(request) {
     
     const studentAnswerId = studentAnswerData[0].student_answer_id;
     
-    // สร้าง embeddings และบันทึกใน Milvus
+    // ประมวลผลด้วย LlamaIndex และสร้าง embeddings พร้อมกัน
     try {
+      // 1. สร้าง LlamaIndex document และ index
+      const metadata = {
+        studentAnswerId: studentAnswerId,
+        fileName: file.name,
+        studentId: studentId,
+        answerKeyId: answerKeyId,
+        folderId: folderId
+      };
+      
+      // สร้าง Index จากเนื้อหา (คำตอบนักเรียนมักมีขนาดเล็กกว่าเฉลย จึงไม่จำเป็นต้องแบ่ง chunks)
+      const document = createDocumentFromText(fileContent, metadata);
+      
+      // เก็บ document ไว้ใน cache
+      const cacheKey = `student_answer_${studentAnswerId}`;
+      setCache(cacheKey, document);
+      
+      // 2. สร้าง embeddings สำหรับ Milvus
       const embedding = await createEmbeddings(fileContent);
       
       const milvusClient = await getMilvusClient();
@@ -84,20 +104,31 @@ export async function POST(request) {
         }]
       });
       
-      // อัพเดทสถานะ has_embeddings เป็น true
+      // อัพเดทสถานะทั้ง has_embeddings และ llamaindex_processed เป็น true
       await supabase
         .from('student_answers')
         .update({ 
           has_embeddings: true,
+          llamaindex_processed: true,
           updated_at: new Date().toISOString()
         })
         .eq('student_answer_id', studentAnswerId);
       
-      // อัพเดตข้อมูลที่จะส่งกลับให้มี has_embeddings เป็น true
+      // อัพเดตข้อมูลที่จะส่งกลับ
       studentAnswerData[0].has_embeddings = true;
-    } catch (embeddingError) {
-      console.error('Error creating embeddings:', embeddingError);
-      // ไม่ส่ง error กลับไปเพื่อให้การอัปโหลดไฟล์สำเร็จ แม้ว่าการสร้าง embeddings จะล้มเหลว
+      studentAnswerData[0].llamaindex_processed = true;
+    } catch (processingError) {
+      console.error('Error processing with LlamaIndex and creating embeddings:', processingError);
+      // บันทึกสถานะว่าการประมวลผลล้มเหลว แต่ไม่ส่งข้อผิดพลาดกลับไปหาผู้ใช้
+      await supabase
+        .from('student_answers')
+        .update({ 
+          processing_error: processingError.message,
+          updated_at: new Date().toISOString()
+        })
+        .eq('student_answer_id', studentAnswerId);
+      
+      studentAnswerData[0].processing_error = processingError.message;
     }
     
     return NextResponse.json({ 
@@ -113,7 +144,41 @@ export async function POST(request) {
   }
 }
 
-// ดึงรายการคำตอบของนักเรียนทั้งหมด (คงเดิม)
+// ดึงรายการคำตอบของนักเรียนทั้งหมด
 export async function GET(request) {
-  // ...ส่วนของฟังก์ชัน GET คงเดิม...
+  try {
+    const { searchParams } = new URL(request.url);
+    const studentId = searchParams.get('studentId');
+    const answerKeyId = searchParams.get('answerKeyId');
+    const folderId = searchParams.get('folderId');
+    
+    const supabase = await createServerClient();
+    
+    let query = supabase
+      .from('student_answers')
+      .select('*, students(name), answer_keys(file_name, subjects(subject_name)), folders(folder_name)')
+      .order('created_at', { ascending: false });
+    
+    if (studentId) {
+      query = query.eq('student_id', studentId);
+    }
+    
+    if (answerKeyId) {
+      query = query.eq('answer_key_id', answerKeyId);
+    }
+    
+    if (folderId) {
+      query = query.eq('folder_id', folderId);
+    }
+    
+    const { data, error } = await query;
+    
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    
+    return NextResponse.json({ studentAnswers: data });
+  } catch (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }

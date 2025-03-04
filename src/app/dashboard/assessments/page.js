@@ -102,10 +102,10 @@ export default function Assessments() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-bold mb-6">รายการประเมินทั้งหมด</h1>
+      <h1 className="text-2xl font-bold mb-6 text-black">รายการประเมินทั้งหมด</h1>
       
       {assessments.length === 0 ? (
-        <div className="p-4 border rounded bg-gray-50">ไม่พบรายการประเมิน</div>
+        <div className="p-4 border rounded bg-gray-50 text-black">ไม่พบรายการประเมิน</div>
       ) : (
         <div className="grid gap-6">
           {assessments.map((assessment) => (

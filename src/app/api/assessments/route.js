@@ -1,13 +1,13 @@
 // src/app/api/assessments/route.js
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { createEmbeddings, checkAnswer } from '@/lib/llm';
-import { getMilvusClient } from '@/lib/milvus';
+import { checkAnswer } from '@/lib/llm';
+import { queryAnswerKeyForAssessment } from '@/lib/llamaindex';
 
 // สร้างการประเมินใหม่
 export async function POST(request) {
   try {
-    const { studentAnswerId, answerKeyId } = await request.json();
+    const { studentAnswerId, answerKeyId, useLlamaIndex = true } = await request.json();
     
     if (!studentAnswerId || !answerKeyId) {
       return NextResponse.json(
@@ -45,29 +45,40 @@ export async function POST(request) {
       );
     }
     
-    // สร้าง embedding สำหรับคำตอบนักเรียน
-    const studentAnswerEmbedding = await createEmbeddings(studentAnswerData.content);
+    let relevantContent = null;
+    let assessmentResult;
     
-    // ค้นหาส่วนที่เกี่ยวข้องของเฉลยจาก Milvus
-    const milvusClient = await getMilvusClient();
-    const searchResults = await milvusClient.search({
-      collection_name: 'answer_key_embeddings',
-      vector: studentAnswerEmbedding,
-      filter: `answer_key_id == ${answerKeyId}`,
-      output_fields: ['content_chunk', 'metadata'],
-      limit: 5,
-    });
-    
-    // สร้างเฉลยที่เกี่ยวข้องจากส่วนที่ค้นพบ
-    const relevantAnswerKey = searchResults.results
-      .map(result => result.content_chunk)
-      .join('\n\n');
-    
-    // ตรวจคำตอบโดย LLM
-    const assessmentResult = await checkAnswer(
-      studentAnswerData.content,
-      relevantAnswerKey || answerKeyData.content
-    );
+    // ใช้ LlamaIndex เพื่อค้นหาส่วนที่เกี่ยวข้องก่อนส่งไปให้ LLM
+    if (useLlamaIndex) {
+      try {
+        const llamaIndexResult = await queryAnswerKeyForAssessment(
+          studentAnswerData.content, 
+          answerKeyId
+        );
+        
+        relevantContent = llamaIndexResult.relevantContent;
+        
+        // ตรวจคำตอบโดย LLM ด้วยข้อมูลจาก LlamaIndex
+        assessmentResult = await checkAnswer(
+          studentAnswerData.content,
+          answerKeyData.content,
+          relevantContent
+        );
+      } catch (llamaIndexError) {
+        console.error('Error using LlamaIndex:', llamaIndexError);
+        // ถ้าเกิดข้อผิดพลาด ให้ใช้วิธีเดิม
+        assessmentResult = await checkAnswer(
+          studentAnswerData.content,
+          answerKeyData.content
+        );
+      }
+    } else {
+      // วิธีเดิมไม่ใช้ LlamaIndex
+      assessmentResult = await checkAnswer(
+        studentAnswerData.content,
+        answerKeyData.content
+      );
+    }
     
     // แยกคะแนนและข้อเสนอแนะจากผลลัพธ์
     const scoreMatch = assessmentResult.match(/(\d+)%/);
@@ -83,7 +94,8 @@ export async function POST(request) {
           score: score,
           feedback_text: assessmentResult,
           confidence: 70,
-          is_approved: false
+          is_approved: false,
+          used_llamaindex: relevantContent !== null
         }
       ])
       .select();
@@ -101,7 +113,7 @@ export async function POST(request) {
       .insert([
         {
           operation_type: 'check_answer',
-          input_text: `Student Answer: ${studentAnswerData.content.substring(0, 100)}... Answer Key: ${relevantAnswerKey.substring(0, 100)}...`,
+          input_text: `Student Answer: ${studentAnswerData.content.substring(0, 100)}... ${relevantContent ? 'Using LlamaIndex RAG' : 'Direct assessment'}`,
           output_text: assessmentResult.substring(0, 500),
           processing_time: 5.0,
           token_count: assessmentResult.split(' ').length,
@@ -111,7 +123,8 @@ export async function POST(request) {
     
     return NextResponse.json({ 
       message: 'ประเมินคำตอบสำเร็จ',
-      assessment: assessmentData[0]
+      assessment: assessmentData[0],
+      used_llamaindex: relevantContent !== null
     });
     
   } catch (error) {
@@ -122,7 +135,7 @@ export async function POST(request) {
   }
 }
 
-// ดึงรายการการประเมินทั้งหมด
+// ดึงรายการการประเมินทั้งหมด (ไม่มีการเปลี่ยนแปลงใหญ่)
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);

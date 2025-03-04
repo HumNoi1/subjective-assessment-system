@@ -4,6 +4,8 @@ import { createServerClient } from '@/lib/supabase';
 import { createEmbeddings } from '@/lib/llm';
 import { getMilvusClient } from '@/lib/milvus';
 import { extractTextFromPDF } from '@/lib/pdf';
+import { createDocumentFromText, createIndexWithChunks } from '@/lib/llamaindex';
+import { setCache } from '@/lib/cache';
 
 export async function POST(request) {
   try {
@@ -79,7 +81,8 @@ export async function POST(request) {
           subject_id: subjectId,
           term_id: termId,
           milvus_collection_name: 'answer_key_embeddings',
-          has_embeddings: false // จะอัปเดตเป็น true หลังจากสร้าง embeddings
+          has_embeddings: false, // จะอัปเดตเป็น true หลังจากสร้าง embeddings
+          llamaindex_processed: false // จะอัปเดตเป็น true หลังจากประมวลผลด้วย LlamaIndex
         }
       ])
       .select();
@@ -89,15 +92,31 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Database error', details: answerKeyError }, { status: 400 });
     }
     
-    // สร้าง embeddings อัตโนมัติหลังจากบันทึกข้อมูล
+    const answerKeyId = answerKeyData[0].answer_key_id;
+    
+    // ประมวลผลด้วย LlamaIndex และสร้าง embeddings พร้อมกัน
     try {
-      const answerKeyId = answerKeyData[0].answer_key_id;
+      // 1. สร้าง LlamaIndex document และ index
+      const metadata = {
+        answerKeyId: answerKeyId,
+        fileName: originalName,
+        subjectId: subjectId,
+        termId: termId
+      };
       
-      // ตัดแบ่งเนื้อหาเป็นส่วน ๆ (chunks)
-      const chunks = chunkText(fileContent, 1000, 200);
+      // สร้าง Index จากเนื้อหาแบบแบ่ง chunks
+      const index = await createIndexWithChunks(fileContent, metadata, 1000, 200);
       
-      if (chunks.length > 0) {
-        // สร้าง embeddings สำหรับแต่ละ chunk
+      // เก็บ Index ไว้ใน cache
+      const cacheKey = `answer_key_index_${answerKeyId}`;
+      setCache(cacheKey, index);
+      
+      // 2. สร้าง embeddings สำหรับ Milvus (ยังคงใช้ Milvus เพื่อความเข้ากันได้กับระบบเดิม)
+      const chunks = fileContent.length > 1000 
+        ? fileContent.match(/.{1,1000}/g) 
+        : [fileContent];
+      
+      if (chunks && chunks.length > 0) {
         const milvusClient = await getMilvusClient();
         const embeddingsPromises = chunks.map(async (chunk, index) => {
           const embedding = await createEmbeddings(chunk);
@@ -122,23 +141,35 @@ export async function POST(request) {
           fields_data: embeddingsData
         });
         
-        // อัพเดทสถานะ has_embeddings เป็น true
+        // อัพเดทสถานะทั้ง has_embeddings และ llamaindex_processed เป็น true
         await supabase
           .from('answer_keys')
           .update({ 
             has_embeddings: true,
             embeddings_count: embeddingsData.length,
+            llamaindex_processed: true,
             updated_at: new Date().toISOString()
           })
           .eq('answer_key_id', answerKeyId);
         
-        // อัพเดตข้อมูลที่จะส่งกลับให้มี has_embeddings เป็น true
+        // อัพเดตข้อมูลที่จะส่งกลับ
         answerKeyData[0].has_embeddings = true;
         answerKeyData[0].embeddings_count = embeddingsData.length;
+        answerKeyData[0].llamaindex_processed = true;
       }
-    } catch (embeddingError) {
-      console.error('Error creating embeddings:', embeddingError);
-      // ไม่ส่ง error กลับไปเพื่อให้การอัปโหลดไฟล์สำเร็จ แม้ว่าการสร้าง embeddings จะล้มเหลว
+    } catch (processingError) {
+      console.error('Error processing with LlamaIndex and creating embeddings:', processingError);
+      // บันทึกสถานะว่าการประมวลผลล้มเหลว
+      await supabase
+        .from('answer_keys')
+        .update({ 
+          processing_error: processingError.message,
+          updated_at: new Date().toISOString()
+        })
+        .eq('answer_key_id', answerKeyId);
+      
+      // ยังคงส่งการอัปโหลดสำเร็จ แต่แจ้งว่าการประมวลผลล้มเหลว
+      answerKeyData[0].processing_error = processingError.message;
     }
     
     return NextResponse.json({ 
@@ -152,26 +183,36 @@ export async function POST(request) {
   }
 }
 
-// Utility function ตัดแบ่งข้อความเป็นส่วน ๆ
-function chunkText(text, chunkSize, overlap) {
-  if (!text || typeof text !== 'string') {
-    console.warn('Invalid text provided for chunking:', text);
-    return [];
-  }
-  
-  const chunks = [];
-  let startIndex = 0;
-  
-  while (startIndex < text.length) {
-    const endIndex = Math.min(startIndex + chunkSize, text.length);
-    chunks.push(text.slice(startIndex, endIndex));
-    startIndex = endIndex - overlap;
+// ดึงรายการไฟล์เฉลยทั้งหมด
+export async function GET(request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const subjectId = searchParams.get('subjectId');
+    const termId = searchParams.get('termId');
     
-    // If next chunk would be too small, stop
-    if (startIndex + chunkSize - overlap >= text.length) {
-      break;
+    const supabase = await createServerClient();
+    
+    let query = supabase
+      .from('answer_keys')
+      .select('*, subjects(subject_name), terms(term_name)')
+      .order('created_at', { ascending: false });
+    
+    if (subjectId) {
+      query = query.eq('subject_id', subjectId);
     }
+    
+    if (termId) {
+      query = query.eq('term_id', termId);
+    }
+    
+    const { data, error } = await query;
+    
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    
+    return NextResponse.json({ answerKeys: data });
+  } catch (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  
-  return chunks;
 }

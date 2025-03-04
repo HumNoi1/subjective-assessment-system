@@ -11,7 +11,6 @@ export async function getMilvusClient() {
       
       milvusClient = new MilvusClient({
         address: milvusAddress,
-        // ตัดการใช้ username และ password ถ้าไม่จำเป็น
       });
       console.log('Milvus client initialized successfully');
     } catch (error) {
