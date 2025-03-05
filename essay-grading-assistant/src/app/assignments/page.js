@@ -179,26 +179,52 @@ export default function Assignments() {
     if (!selectedAssignment) return
     
     try {
-      // บันทึกข้อมูลเฉลยลงฐานข้อมูล
-      const { data, error } = await supabase
+      // ตรวจสอบว่ามีเฉลยอยู่แล้วหรือไม่
+      const { data: existingSolution } = await supabase
         .from('solutions')
-        .upsert({
-          teacher_id: user.id,
-          assignment_id: selectedAssignment.id,
-          file_path: uploadResult.path,
-          file_name: uploadResult.name,
-          uploaded_at: new Date()
-        })
-        .select()
-
-      if (error) throw error
+        .select('id')
+        .eq('assignment_id', selectedAssignment.id)
+        .single();
+      
+      let data;
+      
+      if (existingSolution) {
+        // ถ้ามีเฉลยอยู่แล้ว ให้อัปเดตแทน
+        const { data: updatedData, error } = await supabase
+          .from('solutions')
+          .update({
+            file_path: uploadResult.path,
+            file_name: uploadResult.name,
+            uploaded_at: new Date()
+          })
+          .eq('id', existingSolution.id)
+          .select();
+        
+        if (error) throw error;
+        data = updatedData[0];
+      } else {
+        // ถ้ายังไม่มีเฉลย ให้สร้างใหม่
+        const { data: newData, error } = await supabase
+          .from('solutions')
+          .insert({
+            teacher_id: user.id,
+            assignment_id: selectedAssignment.id,
+            file_path: uploadResult.path,
+            file_name: uploadResult.name,
+            uploaded_at: new Date()
+          })
+          .select();
+        
+        if (error) throw error;
+        data = newData[0];
+      }
       
       // อัปเดตข้อมูลในรายการงาน
       setAssignments(assignments.map(assignment => {
         if (assignment.id === selectedAssignment.id) {
           return {
             ...assignment,
-            solutions: [data[0]]
+            solutions: [data]
           }
         }
         return assignment
@@ -207,12 +233,12 @@ export default function Assignments() {
       // อัปเดตเฉลยใน selectedAssignment
       setSelectedAssignment({
         ...selectedAssignment,
-        solutions: [data[0]]
+        solutions: [data]
       })
       
       // สร้าง embedding สำหรับเฉลย
       const fileContent = await fetchFileContent(uploadResult.path)
-      await createSolutionEmbedding(data[0].id, selectedAssignment.id, fileContent)
+      await createSolutionEmbedding(data.id, selectedAssignment.id, fileContent)
       
       alert('อัปโหลดเฉลยสำเร็จ')
     } catch (error) {
@@ -236,31 +262,39 @@ export default function Assignments() {
     }
   }
 
-  const createSolutionEmbedding = async (solutionId, assignmentId, fileContent) => {
-    try {
-      const response = await fetch('/api/embeddings/solution', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          solutionId,
-          assignmentId,
-          teacherId: user.id,
-          fileContent
-        })
+  // แก้ไขฟังก์ชัน createSolutionEmbedding ในไฟล์ assignments/page.js
+const createSolutionEmbedding = async (solutionId, assignmentId, fileContent) => {
+  try {
+    console.log(`Creating embedding for solution ${solutionId}`);
+    
+    const response = await fetch('/api/embeddings/solution', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        solutionId,
+        assignmentId,
+        teacherId: user.id,
+        fileContent
       })
-      
-      if (!response.ok) {
-        throw new Error('Failed to create embedding')
-      }
-      
-      return await response.json()
-    } catch (error) {
-      console.error('Error creating solution embedding:', error)
-      throw error
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Embedding API error:', errorData);
+      throw new Error(errorData.message || 'Failed to create embedding');
     }
+    
+    const result = await response.json();
+    console.log('Embedding created successfully:', result);
+    return result;
+  } catch (error) {
+    console.error('Error creating solution embedding:', error);
+    // ไม่ throw error เพื่อให้การอัปโหลดยังทำงานต่อไปได้ แม้ embedding จะล้มเหลว
+    return { status: 'error', message: error.message };
   }
+}
 
   // ฟังก์ชันแสดงเทอม/ชั้นเรียน/วิชาของงาน
   const getAssignmentDetails = (assignment) => {

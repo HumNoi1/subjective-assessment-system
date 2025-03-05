@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { processAndCreateEmbeddings } from '@/lib/embeddings';
-import { insertSolutionEmbeddings, deleteSolutionEmbeddings } from '@/lib/milvus';
+import { insertSolutionEmbeddings, deleteSolutionEmbeddings } from '@/lib/qdrant';
 import { supabase } from '@/lib/supabase-admin';
 
 // สร้าง embedding สำหรับเฉลย
@@ -16,7 +16,7 @@ export async function POST(request) {
     // สร้าง embeddings ใหม่
     const { textChunks, embeddings } = await processAndCreateEmbeddings(fileContent);
     
-    // บันทึกลง Milvus
+    // บันทึกลง Qdrant
     const result = await insertSolutionEmbeddings(
       solutionId, 
       assignmentId, 
@@ -27,6 +27,7 @@ export async function POST(request) {
     
     return NextResponse.json(result);
   } catch (error) {
+    console.error('Error creating solution embeddings:', error);
     return NextResponse.json(
       { status: 'error', message: error.message }, 
       { status: 500 }

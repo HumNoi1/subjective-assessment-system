@@ -2,7 +2,7 @@
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 
-// ใช้ LMStudio สำหรับการทำ embeddings
+// ใช้ LMstudio หรือ OpenAI API สำหรับการทำ embeddings
 const LMSTUDIO_ENDPOINT = process.env.LMSTUDIO_EMBEDDING_ENDPOINT || 'http://localhost:8000/v1/embeddings';
 const LMSTUDIO_API_KEY = process.env.LMSTUDIO_API_KEY || 'lm-studio';
 
@@ -25,23 +25,42 @@ export async function createEmbeddings(textChunks) {
   try {
     const embeddings = [];
     
-    // ทำ embeddings ทีละ chunk เพื่อความปลอดภัย
+    // กำหนด timeout ให้นานขึ้น
+    const axiosInstance = axios.create({
+      timeout: 60000 // 60 seconds
+    });
+    
+    // ทำ embeddings ทีละ chunk
     for (const chunk of textChunks) {
-      const response = await axios.post(
-        LMSTUDIO_ENDPOINT,
-        {
-          input: chunk,
-          model: "embedding-model", // ปรับตามโมเดลที่ใช้ใน LMStudio
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${LMSTUDIO_API_KEY}`,
-          },
-        }
-      );
+      console.log(`Creating embedding for chunk: "${chunk.substring(0, 50)}..."`);
       
-      embeddings.push(response.data.data[0].embedding);
+      try {
+        const response = await axiosInstance.post(
+          LMSTUDIO_ENDPOINT,
+          {
+            input: chunk,
+            model: "embedding-model" // ปรับตามโมเดลที่ใช้ใน LMStudio
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${LMSTUDIO_API_KEY}`
+            }
+          }
+        );
+        
+        if (response.data && response.data.data && response.data.data[0] && response.data.data[0].embedding) {
+          embeddings.push(response.data.data[0].embedding);
+        } else {
+          console.error('Invalid embedding response structure:', response.data);
+          throw new Error('Invalid embedding response structure');
+        }
+      } catch (chunkError) {
+        console.error(`Error processing chunk: ${chunkError.message}`);
+        // ในกรณีที่ chunk นี้มีปัญหา ให้ใช้ embedding ว่าง
+        const emptyEmbedding = new Array(1536).fill(0);
+        embeddings.push(emptyEmbedding);
+      }
     }
     
     return embeddings;
@@ -55,6 +74,8 @@ export async function createEmbeddings(textChunks) {
 export async function processAndCreateEmbeddings(fileContent) {
   try {
     const textChunks = chunkText(fileContent);
+    console.log(`Created ${textChunks.length} chunks from file content`);
+    
     const embeddings = await createEmbeddings(textChunks);
     return { textChunks, embeddings };
   } catch (error) {

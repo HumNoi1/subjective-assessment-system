@@ -1,7 +1,7 @@
 // File: app/api/embeddings/search/route.js
 import { NextResponse } from 'next/server';
 import { createEmbeddings } from '@/lib/embeddings';
-import { searchSimilarSubmissions } from '@/lib/milvus';
+import { searchSimilarSubmissions } from '@/lib/qdrant';
 
 // ค้นหาคำตอบของนักเรียนที่คล้ายกับเฉลย
 export async function POST(request) {
@@ -21,6 +21,7 @@ export async function POST(request) {
     
     return NextResponse.json(results);
   } catch (error) {
+    console.error('Error searching embeddings:', error);
     return NextResponse.json(
       { status: 'error', message: error.message }, 
       { status: 500 }

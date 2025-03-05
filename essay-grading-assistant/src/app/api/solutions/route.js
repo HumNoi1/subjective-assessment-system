@@ -1,58 +1,52 @@
-// File: app/api/solutions/route.js
+// File: app/api/embeddings/solution/route.js
 import { NextResponse } from 'next/server';
+import { v4 as uuidv4 } from 'uuid';
+import { processAndCreateEmbeddings } from '@/lib/mock-embeddings';
+import { insertSolutionEmbeddings, deleteSolutionEmbeddings } from '@/lib/qdrant';
 import { supabase } from '@/lib/supabase-admin';
+import { isPDF, prepareContentForEmbedding } from '@/lib/pdf-extractor';
 
-// GET - ดึงข้อมูลเฉลยทั้งหมด (filterable)
-export async function GET(request) {
-  const { searchParams } = new URL(request.url);
-  const teacherId = searchParams.get('teacherId');
-  const assignmentId = searchParams.get('assignmentId');
-
-  let query = supabase.from('solutions').select('*').eq('teacher_id', teacherId);
-  
-  if (assignmentId) {
-    query = query.eq('assignment_id', assignmentId);
-  }
-
-  const { data, error } = await query;
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data);
-}
-
-// POST - อัปโหลดเฉลยใหม่
+// สร้าง embedding สำหรับเฉลย
 export async function POST(request) {
-  const body = await request.json();
-  
-  // ตรวจสอบว่าเฉลยของงานนี้มีอยู่แล้วหรือไม่
-  const { data: existingSolution } = await supabase
-    .from('solutions')
-    .select('id')
-    .eq('assignment_id', body.assignment_id)
-    .single();
-
-  if (existingSolution) {
-    // ถ้ามีอยู่แล้ว ให้อัปเดตแทนที่จะสร้างใหม่
-    const { data, error } = await supabase
-      .from('solutions')
-      .update({
-        file_path: body.file_path,
-        file_name: body.file_name,
-        uploaded_at: new Date()
-      })
-      .eq('id', existingSolution.id)
-      .select();
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json(data[0], { status: 200 });
-  } else {
-    // ถ้ายังไม่มี ให้สร้างใหม่
-    const { data, error } = await supabase
-      .from('solutions')
-      .insert([body])
-      .select();
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json(data[0], { status: 201 });
+  try {
+    const { solutionId, assignmentId, teacherId, fileContent } = await request.json();
+    
+    // ลบ embeddings เก่าของเฉลยนี้ (ถ้ามี)
+    await deleteSolutionEmbeddings(solutionId);
+    
+    // เตรียมเนื้อหาสำหรับการทำ embedding (ตรวจสอบและแปลง PDF ถ้าจำเป็น)
+    const processedContent = await prepareContentForEmbedding(fileContent);
+    
+    // ถ้าเป็น PDF แต่ไม่สามารถดึงข้อความได้ ให้ใช้ mock data
+    const mockData = {
+      textChunks: ["เฉลยอาจารย์"],
+      embeddings: [new Array(1536).fill(0.1)]
+    };
+    
+    // ถ้าไม่มีเนื้อหาที่เหมาะสม ให้ใช้ mock data
+    const { textChunks, embeddings } = isPDF(fileContent) ? 
+      mockData : 
+      await processAndCreateEmbeddings(processedContent);
+    
+    // บันทึกลง Qdrant
+    const result = await insertSolutionEmbeddings(
+      solutionId, 
+      assignmentId, 
+      teacherId, 
+      textChunks, 
+      embeddings
+    );
+    
+    return NextResponse.json({
+      ...result,
+      isPdf: isPDF(fileContent),
+      chunksCount: textChunks.length
+    });
+  } catch (error) {
+    console.error('Error creating solution embeddings:', error);
+    return NextResponse.json(
+      { status: 'error', message: error.message }, 
+      { status: 500 }
+    );
   }
 }

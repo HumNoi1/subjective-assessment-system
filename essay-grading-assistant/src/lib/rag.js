@@ -1,8 +1,9 @@
 // File: lib/rag.js
 import { processAndCreateEmbeddings, createEmbeddings } from './embeddings';
-import { searchSimilarSubmissions } from './milvus';
+import { searchSimilarSubmissions } from './qdrant'; // เปลี่ยนจาก ./milvus เป็น ./qdrant
 import { generateResponse } from './llm';
 import { PROMPTS } from './prompts';
+import { supabase } from './supabase-admin';
 
 // ฟังก์ชันดึงเนื้อหาไฟล์จาก Storage
 async function fetchFileContent(bucket, filePath) {
@@ -21,7 +22,7 @@ async function fetchFileContent(bucket, filePath) {
   }
 }
 
-// ฟังก์ชันดึงคำตอบที่คล้ายกันที่สุดจาก Milvus
+// ฟังก์ชันดึงคำตอบที่คล้ายกันที่สุดจาก Qdrant
 async function retrieveSimilarSubmissions(assignmentId, queryText) {
   try {
     // สร้าง embedding สำหรับคำถาม
@@ -83,4 +84,19 @@ ${studentSubmissionContent}
     console.error('Error grading submission with RAG:', error);
     throw error;
   }
+}
+
+// สร้าง prompt สำหรับการดึงประเด็นสำคัญ
+function createKeyPointsPrompt(teacherSolution) {
+  return [
+    { role: 'system', content: 'คุณเป็นผู้ช่วยวิเคราะห์เนื้อหาวิชาวิศวกรรมซอฟต์แวร์ที่มีความเชี่ยวชาญ' },
+    {
+      role: 'user',
+      content: `กรุณาสกัดประเด็นสำคัญจากเฉลยข้อสอบวิชาวิศวกรรมซอฟต์แวร์ต่อไปนี้ ให้แสดงเป็นรายข้อ พร้อมคำอธิบายสั้นๆ สำหรับแต่ละประเด็น:
+
+${teacherSolution}
+
+แสดงเฉพาะประเด็นสำคัญที่จำเป็นต้องมีในคำตอบ`
+    }
+  ];
 }

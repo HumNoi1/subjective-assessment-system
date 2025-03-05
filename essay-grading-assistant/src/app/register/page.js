@@ -25,20 +25,35 @@ export default function Register() {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            name: name
+          }
+        }
       })
 
       if (authError) throw authError
 
-      // 2. สร้างข้อมูลอาจารย์ในตาราง teachers
+      if (!authData?.user?.id) {
+        throw new Error('ไม่สามารถสร้างบัญชีผู้ใช้ได้')
+      }
+
+      // 2. สร้างข้อมูลอาจารย์ในตาราง teachers โดยใช้ ID เดียวกับระบบ auth
       const { error: profileError } = await supabase
         .from('teachers')
-        .insert([{ id: authData.user.id, email, name }])
+        .insert([{ 
+          id: authData.user.id, 
+          email, 
+          name,
+          created_at: new Date()
+        }])
 
       if (profileError) throw profileError
 
       setSuccess(true)
       setTimeout(() => router.push('/login'), 2000)
     } catch (err) {
+      console.error('Registration error:', err)
       setError(err.message)
     } finally {
       setLoading(false)
