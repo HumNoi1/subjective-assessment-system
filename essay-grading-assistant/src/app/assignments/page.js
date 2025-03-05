@@ -49,7 +49,7 @@ export default function Assignments() {
       if (subjectsError) throw subjectsError
       setSubjects(subjectsData || [])
       
-      // ดึงข้อมูลงานพร้อมข้อมูลวิชา
+      // ดึงข้อมูลงานพร้อมข้อมูลวิชา - แก้ไขส่วนนี้
       const { data: assignmentsData, error: assignmentsError } = await supabase
         .from('assignments')
         .select(`
@@ -86,7 +86,8 @@ export default function Assignments() {
         throw new Error('กรุณากรอกข้อมูลให้ครบถ้วน')
       }
       
-      const { data, error } = await supabase
+      // แก้ไขการ query นี้
+      const { data: insertedData, error } = await supabase
         .from('assignments')
         .insert([{
           teacher_id: user.id,
@@ -95,14 +96,20 @@ export default function Assignments() {
           subject_id: newAssignment.subject_id,
           created_at: new Date()
         }])
-        .select(`
-          *,
-          subjects (id, name),
-          subjects.classes (id, name),
-          subjects.classes.semesters (id, name, year)
-        `)
+        .select()
 
       if (error) throw error
+      
+      // ดึงข้อมูลวิชาของงานใหม่
+      const { data: subjectData } = await supabase
+        .from('subjects')
+        .select(`
+          id, 
+          name,
+          classes:classes(id, name, semesters:semesters(id, name, year))
+        `)
+        .eq('id', newAssignment.subject_id)
+        .single()
       
       // สร้างโฟลเดอร์สำหรับเก็บเฉลย
       const folderRes = await fetch('/api/storage/folders', {
@@ -119,6 +126,13 @@ export default function Assignments() {
       
       if (!folderRes.ok) {
         console.error('Error creating solution folder');
+      }
+      
+      // เพิ่มข้อมูลวิชาเข้าไปในงานใหม่
+      const newAssignmentWithSubject = {
+        ...insertedData[0],
+        subjects: subjectData,
+        solutions: []
       }
       
       // เพิ่มงานใหม่เข้าไปในรายการ
