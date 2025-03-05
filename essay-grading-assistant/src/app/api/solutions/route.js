@@ -2,9 +2,9 @@
 import { NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { processAndCreateEmbeddings } from '@/lib/mock-embeddings';
-import { insertSolutionEmbeddings, deleteSolutionEmbeddings } from '@/lib/qdrant';
+import { insertSolutionEmbeddings, deleteSolutionEmbeddings } from '@/lib/utils/qdrant-client';
 import { supabase } from '@/lib/supabase-admin';
-import { isPDF, prepareContentForEmbedding } from '@/lib/pdf-extractor';
+import { isPDF, prepareContentForEmbedding } from '@/lib/utils/pdf-loader';
 
 // สร้าง embedding สำหรับเฉลย
 export async function POST(request) {

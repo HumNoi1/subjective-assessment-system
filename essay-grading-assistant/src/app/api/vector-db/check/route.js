@@ -1,6 +1,6 @@
 // File: src/app/api/vector-db/check/route.js
 import { NextResponse } from 'next/server';
-import qdrantClient, { checkConnection, ensureCollections } from '@/lib/qdrant';
+import qdrantClient, { checkConnection, ensureCollections } from '@/lib/utils/qdrant-client';
 
 export async function GET() {
   try {

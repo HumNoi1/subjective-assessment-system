@@ -1,7 +1,7 @@
 // File: app/api/embeddings/search/route.js
 import { NextResponse } from 'next/server';
 import { createEmbeddings } from '@/lib/embeddings';
-import { searchSimilarSubmissions } from '@/lib/qdrant';
+import { searchSimilarSubmissions } from '@/lib/utils/qdrant-client';
 
 // ค้นหาคำตอบของนักเรียนที่คล้ายกับเฉลย
 export async function POST(request) {

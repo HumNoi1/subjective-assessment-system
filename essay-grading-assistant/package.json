@@ -9,12 +9,17 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@langchain/core": "^0.3.42",
+    "@langchain/openai": "^0.4.4",
     "@qdrant/js-client-rest": "^1.13.0",
     "@supabase/supabase-js": "^2.49.1",
     "@zilliz/milvus2-sdk-node": "^2.5.5",
     "axios": "^1.8.1",
+    "langchain": "^0.3.19",
+    "marked": "^15.0.7",
     "next": "15.2.1",
     "pdf-lib": "^1.17.1",
+    "pdf-parse": "^1.1.1",
     "pdfjs-dist": "^4.10.38",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

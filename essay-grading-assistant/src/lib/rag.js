@@ -1,6 +1,6 @@
 // File: lib/rag.js
 import { processAndCreateEmbeddings, createEmbeddings } from './embeddings';
-import { searchSimilarSubmissions } from './qdrant'; // เปลี่ยนจาก ./milvus เป็น ./qdrant
+import { searchSimilarSubmissions } from './utils/qdrant-client'; // เปลี่ยนจาก ./milvus เป็น ./qdrant
 import { generateResponse } from './llm';
 import { PROMPTS } from './prompts';
 import { supabase } from './supabase-admin';

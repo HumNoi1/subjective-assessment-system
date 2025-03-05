@@ -1,14 +1,9 @@
-// File: src/app/api/embeddings/solution/route.js
+// src/app/api/embeddings/solution/route.js
 import { NextResponse } from 'next/server';
-import { processAndCreateEmbeddings } from '@/lib/embeddings';
-import { 
-  insertSolutionEmbeddings, 
-  deleteSolutionEmbeddings 
-} from '@/lib/qdrant';
-import { 
-  isPDF, 
-  prepareContentForEmbedding 
-} from '@/lib/pdf-extractor';
+import { processAndCreateEmbeddings, createMockEmbeddings } from '@/lib/utils/embeddings';
+import { insertSolutionEmbeddings } from '@/lib/utils/qdrant-client';
+import { isPDF, prepareContentForEmbedding } from '@/lib/utils/pdf-loader';
+import { splitTextIntoChunks } from '@/lib/utils/text-splitter';
 
 // สร้าง embedding สำหรับเฉลย
 export async function POST(request) {
@@ -33,15 +28,23 @@ export async function POST(request) {
     // ล็อกข้อมูลการทำงาน
     console.log(`Processing solution: ${solutionId} for assignment: ${assignmentId}`);
     
+    // แปลง base64 เป็นข้อความหรือ Buffer ตามความเหมาะสม
+    let decodedContent;
+    try {
+      decodedContent = Buffer.from(fileContent, 'base64');
+    } catch (error) {
+      decodedContent = fileContent; // หากไม่ใช่ base64 ให้ใช้ค่าเดิม
+    }
+    
     // เตรียมเนื้อหาสำหรับการทำ embedding
     let processedContent;
-    let isPdfContent = isPDF(fileContent);
+    let isPdfContent = isPDF(decodedContent);
     
     try {
-      processedContent = await prepareContentForEmbedding(fileContent);
+      processedContent = await prepareContentForEmbedding(decodedContent);
     } catch (prepareError) {
       console.error('Error preparing content:', prepareError);
-      processedContent = fileContent; // ใช้เนื้อหาเดิมถ้ามีปัญหา
+      processedContent = typeof decodedContent === 'string' ? decodedContent : 'ไม่สามารถเตรียมเนื้อหาได้';
     }
     
     // ตรวจสอบเนื้อหาหลังจากการเตรียม
@@ -50,8 +53,11 @@ export async function POST(request) {
       processedContent = "เฉลยอาจารย์ (ไม่สามารถแปลงเนื้อหาได้)";
     }
     
-    // ประมวลผลและสร้าง embeddings
-    const { textChunks, embeddings } = processAndCreateEmbeddings(processedContent);
+    // แบ่งข้อความเป็นชิ้นเล็กๆ
+    const textChunks = await splitTextIntoChunks(processedContent);
+    
+    // สร้าง mock embeddings แทนการใช้ API จริง (สำหรับทดสอบ)
+    const embeddings = createMockEmbeddings(textChunks.length);
     
     // บันทึกลง Qdrant
     const result = await insertSolutionEmbeddings(
@@ -66,7 +72,7 @@ export async function POST(request) {
       ...result,
       isPdf: isPdfContent,
       chunksCount: textChunks.length,
-      textSample: textChunks[0].substring(0, 100) // แสดงตัวอย่างข้อความ
+      textSample: textChunks.length > 0 ? textChunks[0].substring(0, 100) : ''
     });
   } catch (error) {
     console.error('Error creating solution embeddings:', error);
