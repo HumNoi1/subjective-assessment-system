@@ -41,8 +41,7 @@ export default function Assignments() {
         .select(`
           id, 
           name,
-          classes (id, name),
-          classes.semesters (id, name, year)
+          classes:classes(id, name, semesters:semesters(id, name, year))
         `)
         .eq('teacher_id', user.id)
         .order('name')
@@ -55,10 +54,8 @@ export default function Assignments() {
         .from('assignments')
         .select(`
           *,
-          subjects (id, name),
-          subjects.classes (id, name),
-          subjects.classes.semesters (id, name, year),
-          solutions (id, file_name, file_path, uploaded_at)
+          subjects:subjects(id, name, classes:classes(id, name, semesters:semesters(id, name, year))),
+          solutions:solutions(id, file_name, file_path, uploaded_at)
         `)
         .eq('teacher_id', user.id)
         .order('created_at', { ascending: false })
@@ -115,7 +112,7 @@ export default function Assignments() {
         },
         body: JSON.stringify({
           teacherId: user.id,
-          assignmentId: data[0].id,
+          assignmentId: insertedData[0].id,
           type: 'solution'
         })
       })
@@ -125,7 +122,7 @@ export default function Assignments() {
       }
       
       // เพิ่มงานใหม่เข้าไปในรายการ
-      setAssignments([data[0], ...assignments])
+      setAssignments([newAssignmentWithSubject, ...assignments])
       setNewAssignment({ name: '', description: '', subject_id: newAssignment.subject_id })
     } catch (error) {
       console.error('Error adding assignment:', error)
@@ -299,7 +296,7 @@ export default function Assignments() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 text-black">
         {/* Form เพิ่มงานใหม่ */}
         <Card title="เพิ่มงานใหม่">
           {error && (

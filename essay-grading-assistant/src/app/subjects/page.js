@@ -32,7 +32,7 @@ export default function Subjects() {
         .select(`
           id, 
           name,
-          semesters (id, name, year)
+          semesters:semesters(id, name, year)
         `)
         .eq('teacher_id', user.id)
         .order('name')
@@ -45,8 +45,7 @@ export default function Subjects() {
         .from('subjects')
         .select(`
           *,
-          classes (id, name),
-          classes.semesters (id, name, year)
+          classes:classes(id, name, semesters:semesters(id, name, year))
         `)
         .eq('teacher_id', user.id)
         .order('name')
@@ -77,22 +76,32 @@ export default function Subjects() {
         throw new Error('กรุณากรอกข้อมูลให้ครบถ้วน')
       }
       
-      const { data, error } = await supabase
+      // สร้างวิชาและดึงข้อมูลชั้นเรียนแยกกัน
+      const { data: insertedData, error } = await supabase
         .from('subjects')
         .insert([{
           teacher_id: user.id,
           name: newSubject.name,
           class_id: newSubject.class_id
         }])
-        .select(`
-          *,
-          classes (id, name),
-          classes.semesters (id, name, year)
-        `)
+        .select()
 
       if (error) throw error
       
-      setSubjects([...subjects, data[0]])
+      // ดึงข้อมูลชั้นเรียนของวิชาใหม่
+      const { data: classData } = await supabase
+        .from('classes')
+        .select('id, name, semesters:semesters(id, name, year)')
+        .eq('id', newSubject.class_id)
+        .single()
+      
+      // รวมข้อมูลวิชาและชั้นเรียนเข้าด้วยกัน
+      const newSubjectWithClass = {
+        ...insertedData[0],
+        classes: classData
+      }
+      
+      setSubjects([...subjects, newSubjectWithClass])
       setNewSubject({ name: '', class_id: newSubject.class_id })
     } catch (error) {
       console.error('Error adding subject:', error)
