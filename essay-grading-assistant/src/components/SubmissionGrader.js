@@ -71,7 +71,7 @@ export default function SubmissionGrader({
   return (
     <div className="container mx-auto p-4">
       <div className="mb-6 flex flex-col md:flex-row gap-4 md:items-center md:justify-between">
-        <h2 className="text-2xl font-bold">ตรวจคำตอบนักเรียน</h2>
+        <h2 className="text-2xl font-bold text-black">ตรวจคำตอบนักเรียน</h2>
         
         <button
           onClick={handleGrade}
@@ -96,15 +96,15 @@ export default function SubmissionGrader({
         </div>
       )}
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 text-black">
         <div className="p-4 bg-gray-50 rounded-md shadow-sm">
-          <h3 className="text-lg font-medium mb-2">โจทย์</h3>
+          <h3 className="text-lg font-medium mb-2 ">โจทย์</h3>
           <div className="p-3 bg-white rounded">
             <div className="prose prose-sm" dangerouslySetInnerHTML={renderMarkdown(question)} />
           </div>
         </div>
         
-        <div className="p-4 bg-gray-50 rounded-md shadow-sm">
+        <div className="p-4 bg-gray-50 rounded-md shadow-sm text-black">
           <h3 className="text-lg font-medium mb-2">คำตอบนักเรียน</h3>
           <div className="p-3 bg-white rounded h-[300px] overflow-y-auto">
             <div className="prose prose-sm" dangerouslySetInnerHTML={renderMarkdown(submissionContent)} />

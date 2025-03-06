@@ -145,7 +145,7 @@ export default function Dashboard() {
       </div>
 
       {/* งานที่ส่งล่าสุด */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden text-black">
         <div className="px-6 py-4 border-b">
           <h2 className="font-semibold text-lg">งานที่นักเรียนส่งล่าสุด</h2>
         </div>

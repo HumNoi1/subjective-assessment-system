@@ -374,7 +374,7 @@ const createSolutionEmbedding = async (solutionId, assignmentId, fileContent) =>
               </div>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  คำอธิบาย/โจทย์
+                  คำอธิบาย
                 </label>
                 <textarea
                   value={newAssignment.description}

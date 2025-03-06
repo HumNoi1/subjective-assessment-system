@@ -44,7 +44,7 @@ export default function Sidebar() {
         )}
         <button
           onClick={toggleSidebar}
-          className="p-1 rounded-md hover:bg-gray-100"
+          className="p-1 rounded-md hover:bg-gray-100 text-black"
         >
           {isOpen ? (
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
@@ -115,7 +115,7 @@ export default function Sidebar() {
         />
       </nav>
 
-      <div className="p-4 border-t">
+      <div className="p-4 border-t text-black">
         {user && (
           <div className="flex items-center mb-4">
             <div className="bg-blue-100 text-blue-800 rounded-full w-8 h-8 flex items-center justify-center mr-2">
